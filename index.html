@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR" translate="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="google" content="notranslate">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulta de Promoções</title>
+    
+    <!-- Bibliotecas: SheetJS para Excel e Html5-QRCode para câmera -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { background-color: #f4f6f9; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        
+        /* Modal de Autenticação */
+        #auth-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); display: flex;
+            justify-content: center; align-items: center; z-index: 9999;
+        }
+        .auth-card {
+            background: #ffffff; padding: 30px; border-radius: 15px;
+            max-width: 400px; width: 90%; text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+        .auth-card h2 { color: #d32f2f; margin-top: 0; font-size: 22px; }
+        .auth-card input {
+            width: 100%; padding: 12px; margin: 15px 0; border: 2px solid #ddd;
+            border-radius: 8px; font-size: 16px; text-align: center; letter-spacing: 2px;
+        }
+        .auth-card button {
+            width: 100%; padding: 12px; background: #d32f2f; color: white;
+            border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer;
+        }
+        #auth-error { color: #c62828; font-size: 14px; margin-top: 10px; display: none; font-weight: bold; }
+
+        /* Aplicação Principal */
+        #main-app { display: none; max-width: 500px; width: 100%; }
+        
+        .container { background: #ffffff; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
+        h1 { color: #d32f2f; margin-top: 0; font-size: 24px; }
+        
+        #status-db { font-size: 13px; margin-bottom: 15px; padding: 10px; border-radius: 8px; font-weight: bold; }
+        .loading { background: #fff3cd; color: #856404; }
+        .ready { background: #d4edda; color: #155724; display: none; }
+        .error { background: #f8d7da; color: #721c24; }
+
+        #reader { width: 100%; max-width: 400px; margin: 15px auto; border-radius: 10px; overflow: hidden; border: 1px solid #ddd; background: #fafafa; }
+        #reader button { padding: 10px 15px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin: 10px 0; }
+        #reader select { padding: 8px; border-radius: 5px; border: 1px solid #ccc; margin-bottom: 10px; }
+
+        #result-box { margin-top: 20px; padding: 15px; border-radius: 10px; display: none; text-align: left; }
+        .found { background-color: #e8f5e9; border-left: 6px solid #2e7d32; }
+        .not-found { background-color: #ffebee; border-left: 6px solid #c62828; }
+        .product-title { font-size: 18px; font-weight: bold; color: #333; margin-bottom: 5px; }
+        .product-price { font-size: 32px; font-weight: 900; color: #e53935; margin-top: 5px; }
+        .product-code { font-size: 12px; color: #777; }
+
+        .manual-input { margin-top: 15px; display: flex; gap: 5px; }
+        .manual-input input { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
+        .manual-input button { padding: 12px 18px; background: #007bff; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+
+        /* Estilos do Bloco Fixado de Suporte (Sempre Visível) */
+
+        .suporte-box {
+            margin-top: 30px; /* Distância entre a digitação manual e o suporte */
+            padding-top: 15px;
+            border-top: 1px dashed #ccc;
+            text-align: center;
+            font-size: 13px;
+            color: #555;
+        }
+        .suporte-box p {
+            margin: 0 0 6px 0;
+            font-weight: bold;
+            color: #333;
+        }
+        .suporte-contatos {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .suporte-contatos span {
+            color: #444;
+        }
+        .btn-sair {
+          margin-top: 15px;
+          width: 100%;
+          padding: 12px;
+          background-color: #7d6f6c;
+          color: white;
+          border: none;
+          border-radius: 5px;
+          font-weight: bold;
+          cursor: pointer;
+       }
+       .btn-sair:hover {
+       background-color: #7d6f6c;
+}
+    </style>
+</head>
+<body>
+
+<!-- Tela de Bloqueio por Token -->
+<div id="auth-overlay">
+    <div class="auth-card">
+        <h2>🔒 Acesso Restrito</h2>
+        <p style="font-size: 14px; color: #666;">Digite o token para liberar o sistema de consulta.</p>
+        <input type="password" id="input-token" placeholder="Digite o Token">
+        <button onclick="validarToken()">Acessar Sistema</button>
+        <div id="auth-error">❌ Token incorreto!</div>
+    </div>
+</div>
+
+<!-- Interface Principal da Aplicação -->
+<div id="main-app">
+    <div class="container">
+        <h1>🔥 CONSULTA PROMOÇÕES 🔥</h1>
+        <h2>Wilian Software</h2>
+        <div id="status-db" class="loading">Sincronizando produtos promocionais...</div>
+
+        <div id="reader"></div>
+
+        <div id="result-box">
+            <div id="res-conteudo"></div>
+        </div>
+
+        <div class="manual-input">
+            <input type="text" id="manual-code" placeholder="Digite o código de barras">
+            <button onclick="buscarPorCodigo(document.getElementById('manual-code').value)">Buscar</button>
+            <button type="button" onclick="sairDoSistema()" class="btn-sair">🚪 Sair do Sistema</button>
+        </div>
+
+        <!-- ÁREA DE SUPORTE FIXA (Sempre visível abaixo da digitação manual) -->
+        <div class="suporte-box">
+            <p>Precisa de suporte?</p>
+            <div class="suporte-contatos">
+                <span>📞 <strong>Telefone/WhatsApp:</strong> (37) 9 9846-8524</span>
+                <span>✉️ <strong>E-mail:</strong> whrfreitas@gmail.com</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let bancoDadosProdutos = [];
+    let ultimaLeitura = "";
+    let travamentoLeitura = false;
+
+    const statusDb = document.getElementById('status-db');
+    const resultBox = document.getElementById('result-box');
+    const resConteudo = document.getElementById('res-conteudo');
+
+    async function gerarHashSHA256(texto) {
+        const msgBuffer = new TextEncoder().encode(texto);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function validarToken() {
+        const inputToken = document.getElementById('input-token');
+        const tokenDigitado = inputToken.value.trim();
+        const authError = document.getElementById('auth-error');
+
+        if (!tokenDigitado) {
+            authError.style.display = 'block';
+            authError.innerText = '⚠️ Digite um token!';
+            return;
+        }
+
+        try {
+            const hashDigitado = await gerarHashSHA256(tokenDigitado);
+
+            const response = await fetch('./config.xlsx?v=' + new Date().getTime());
+            if (!response.ok) throw new Error("Erro ao carregar o arquivo de validação.");
+
+            const arrayBuffer = await response.arrayBuffer();
+            const data = new Uint8Array(arrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            const primeiraAba = workbook.Sheets[workbook.SheetNames[0]];
+            const hashSalvoNaPlanilha = primeiraAba && primeiraAba['A1'] ? String(primeiraAba['A1'].v).trim() : '';
+
+            if (hashDigitado.toLowerCase() === hashSalvoNaPlanilha.toLowerCase()) {
+                document.getElementById('auth-overlay').style.display = 'none';
+                document.getElementById('main-app').style.display = 'block';
+                carregarPlanilhaExcelAutomatico();
+            } else {
+                authError.style.display = 'block';
+                authError.innerText = '❌ Token incorreto!';
+            }
+        } catch (err) {
+            console.error("Erro na validação:", err);
+            authError.style.display = 'block';
+            authError.innerText = '❌ Erro de validação. O arquivo config.xlsx não foi encontrado.';
+        }
+    }
+
+    document.getElementById('input-token').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') validarToken();
+    });
+
+    async function carregarPlanilhaExcelAutomatico() {
+        try {
+            const response = await fetch('./produtos.xlsx?v=' + new Date().getTime());
+            if (!response.ok) throw new Error("Status: " + response.status);
+            
+            const arrayBuffer = await response.arrayBuffer();
+            const data = new Uint8Array(arrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            const primeiraAba = workbook.SheetNames[0];
+            const planilhaJson = XLSX.utils.sheet_to_json(workbook.Sheets[primeiraAba]);
+
+            bancoDadosProdutos = planilhaJson.map(item => {
+                const buscarColuna = (termos) => {
+                    const chaveReal = Object.keys(item).find(k => 
+                        termos.includes(k.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, ""))
+                    );
+                    return chaveReal ? String(item[chaveReal]).trim() : '';
+                };
+
+                return {
+                    codigo: buscarColuna(['codigo', 'cod', 'barcode', 'codigo de barras']),
+                    descricao: buscarColuna(['descricao', 'nome', 'produto', 'item']),
+                    preco: buscarColuna(['preco', 'valor', 'venda', 'promocao'])
+                };
+            }).filter(p => p.codigo !== '');
+
+            if (bancoDadosProdutos.length === 0) throw new Error("Planilha vazia");
+
+            if (statusDb) statusDb.className = "ready";
+            iniciarScannerPronto();
+
+        } catch (err) {
+            console.error("Erro detalhado:", err);
+            if (statusDb) {
+                statusDb.className = 'error';
+                statusDb.innerHTML = '❌ Falha de sincronização. Verifique se o arquivo produtos.xlsx está na mesma pasta.';
+            }
+        }
+    }
+
+    function buscarPorCodigo(codigoEscaneado) {
+        if (!codigoEscaneado || bancoDadosProdutos.length === 0) return;
+        
+        const normalizar = (str) => String(str || '').trim().replace(/^0+/, '');
+        const codigoLimpo = normalizar(codigoEscaneado);
+
+        const produto = bancoDadosProdutos.find(p => normalizar(p.codigo) === codigoLimpo);
+
+        resultBox.style.display = "block";
+
+        if (produto) {
+            resultBox.className = "found";
+            const valorNumerico = parseFloat(String(produto.preco).replace(',', '.'));
+            const precoFormatado = isNaN(valorNumerico) 
+                ? produto.preco 
+                : valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            
+            resConteudo.innerHTML = `
+                <div class="product-title">${produto.descricao}</div>
+                <div class="product-code">Cód: ${produto.codigo}</div>
+                <div style="font-size: 14px; margin-top:10px; color:#555;">Preço de Promoção:</div>
+                <div class="product-price">${precoFormatado}</div>
+            `;
+            tocarBip();
+        } else {
+            resultBox.className = "not-found";
+            resConteudo.innerHTML = `
+                <div class="product-title" style="color: #c62828;">Produto não cadastrado</div>
+                <div class="product-code">O código <strong>${codigoEscaneado}</strong> não está em promoção.</div>
+            `;
+        }
+    }
+
+    function iniciarScannerPronto() {
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader",
+            { 
+                fps: 15, 
+                qrbox: { width: 280, height: 120 },
+                aspectRatio: 1.0
+            },
+            false
+        );
+
+        html5QrcodeScanner.render(
+            (decodedText) => {
+                if (decodedText === ultimaLeitura && travamentoLeitura) return;
+                
+                ultimaLeitura = decodedText;
+                travamentoLeitura = true;
+                
+                const inputManual = document.getElementById('manual-code');
+                if (inputManual) inputManual.value = decodedText;
+                
+                buscarPorCodigo(decodedText);
+                
+                setTimeout(() => { travamentoLeitura = false; }, 2000);
+            },
+            (errorMessage) => {}
+        );
+    }
+
+    function tocarBip() {
+        try {
+            const context = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = context.createOscillator();
+            osc.type = "sine";
+            osc.frequency.value = 900;
+            osc.connect(context.destination);
+            osc.start();
+            setTimeout(() => osc.stop(), 80);
+        } catch(e) {}
+    }
+
+function sairDoSistema() {
+    // 1. Limpa os dados armazenados na sessão/memória local
+    bancoDadosProdutos = [];
+    ultimaLeitura = "";
+    
+    if (document.getElementById('manual-code')) {
+        document.getElementById('manual-code').value = "";
+    }
+    if (document.getElementById('result-box')) {
+        document.getElementById('result-box').style.display = "none";
+    }
+
+    // 2. Tenta fechar a aba atual
+    window.close();
+
+    // 3. Se o navegador bloquear o fechamento (comportamento padrão),
+    // substitui a página atual no histórico e redireciona para o Google
+    setTimeout(() => {
+        window.location.replace("https://www.google.com");
+    }, 100);
+}
+</script>
+
+</body>
+</html>
