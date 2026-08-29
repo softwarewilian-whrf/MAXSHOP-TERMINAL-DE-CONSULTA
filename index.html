@@ -6,7 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Consulta de Promoções</title>
     
-    <!-- Bibliotecas: SheetJS para Excel e Html5-QRCode para câmera -->
+    <!-- Bibliotecas: Supabase, SheetJS e Html5-QRCode -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
 
@@ -27,13 +28,14 @@
         }
         .auth-card h2 { color: #d32f2f; margin-top: 0; font-size: 22px; }
         .auth-card input {
-            width: 100%; padding: 12px; margin: 15px 0; border: 2px solid #ddd;
-            border-radius: 8px; font-size: 16px; text-align: center; letter-spacing: 2px;
+            width: 100%; padding: 12px; margin: 8px 0; border: 2px solid #ddd;
+            border-radius: 8px; font-size: 15px; text-align: left;
         }
         .auth-card button {
             width: 100%; padding: 12px; background: #d32f2f; color: white;
-            border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer;
+            border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 10px;
         }
+        .auth-card button:disabled { background: #ccc; cursor: not-allowed; }
         #auth-error { color: #c62828; font-size: 14px; margin-top: 10px; display: none; font-weight: bold; }
 
         /* Aplicação Principal */
@@ -62,55 +64,38 @@
         .manual-input input { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
         .manual-input button { padding: 12px 18px; background: #007bff; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
 
-        /* Estilos do Bloco Fixado de Suporte (Sempre Visível) */
-
         .suporte-box {
-            margin-top: 30px; /* Distância entre a digitação manual e o suporte */
+            margin-top: 30px;
             padding-top: 15px;
             border-top: 1px dashed #ccc;
             text-align: center;
             font-size: 13px;
             color: #555;
         }
-        .suporte-box p {
-            margin: 0 0 6px 0;
-            font-weight: bold;
-            color: #333;
-        }
-        .suporte-contatos {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-        .suporte-contatos span {
-            color: #444;
-        }
+        .suporte-box p { margin: 0 0 6px 0; font-weight: bold; color: #333; }
+        .suporte-contatos { display: flex; flex-direction: column; gap: 5px; }
+        .suporte-contatos span { color: #444; }
         .btn-sair {
-          margin-top: 15px;
-          width: 100%;
-          padding: 12px;
-          background-color: #7d6f6c;
-          color: white;
-          border: none;
-          border-radius: 5px;
-          font-weight: bold;
-          cursor: pointer;
-       }
-       .btn-sair:hover {
-       background-color: #7d6f6c;
-}
+            margin-top: 15px; width: 100%; padding: 12px;
+            background-color: #7d6f6c; color: white; border: none;
+            border-radius: 5px; font-weight: bold; cursor: pointer;
+        }
+        .btn-sair:hover { background-color: #5f5452; }
     </style>
 </head>
 <body>
 
-<!-- Tela de Bloqueio por Token -->
+<!-- Tela de Autenticação Supabase -->
 <div id="auth-overlay">
     <div class="auth-card">
-        <h2>🔒 Acesso Restrito</h2>
-        <p style="font-size: 14px; color: #666;">Digite o token para liberar o sistema de consulta.</p>
-        <input type="password" id="input-token" placeholder="Digite o Token">
-        <button onclick="validarToken()">Acessar Sistema</button>
-        <div id="auth-error">❌ Token incorreto!</div>
+        <h2>🔒 Acesso ao Sistema</h2>
+        <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Informe suas credenciais para entrar.</p>
+        
+        <input type="text" id="input-identificador" placeholder="Usuário ou E-mail">
+        <input type="password" id="input-senha" placeholder="Senha">
+        
+        <button id="btn-login" onclick="validarLogin()">Acessar Sistema</button>
+        <div id="auth-error"></div>
     </div>
 </div>
 
@@ -130,10 +115,10 @@
         <div class="manual-input">
             <input type="text" id="manual-code" placeholder="Digite o código de barras">
             <button onclick="buscarPorCodigo(document.getElementById('manual-code').value)">Buscar</button>
-            <button type="button" onclick="sairDoSistema()" class="btn-sair">🚪 Sair do Sistema</button>
         </div>
+        <button type="button" onclick="sairDoSistema()" class="btn-sair">🚪 Sair do Sistema</button>
 
-        <!-- ÁREA DE SUPORTE FIXA (Sempre visível abaixo da digitação manual) -->
+        <!-- ÁREA DE SUPORTE -->
         <div class="suporte-box">
             <p>Precisa de suporte?</p>
             <div class="suporte-contatos">
@@ -145,6 +130,13 @@
 </div>
 
 <script>
+    // ==========================================
+    // CONFIGURAÇÃO DO SUPABASE
+    // ==========================================
+    const SUPABASE_URL = 'https://sglmlcwzzjlrqthkmovq.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNnbG1sY3d6empscnF0aGttb3ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NTU0MzEsImV4cCI6MjEwMTMzMTQzMX0.YtxgLeWrflL8EW7ye6ou0-ZyOpHAjud0z4XH7CYPS4w';
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
     let bancoDadosProdutos = [];
     let ultimaLeitura = "";
     let travamentoLeitura = false;
@@ -153,54 +145,76 @@
     const resultBox = document.getElementById('result-box');
     const resConteudo = document.getElementById('res-conteudo');
 
-    async function gerarHashSHA256(texto) {
-        const msgBuffer = new TextEncoder().encode(texto);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    async function validarToken() {
-        const inputToken = document.getElementById('input-token');
-        const tokenDigitado = inputToken.value.trim();
+    // Função de Validação do Login
+    async function validarLogin() {
+        const identificador = document.getElementById('input-identificador').value.trim();
+        const senha = document.getElementById('input-senha').value.trim();
         const authError = document.getElementById('auth-error');
+        const btnLogin = document.getElementById('btn-login');
 
-        if (!tokenDigitado) {
+        authError.style.display = 'none';
+
+        if (!identificador || !senha) {
+            authError.innerText = '⚠️ Preencha o usuário/e-mail e a senha!';
             authError.style.display = 'block';
-            authError.innerText = '⚠️ Digite um token!';
             return;
         }
 
+        btnLogin.disabled = true;
+        btnLogin.innerText = 'Verificando...';
+
         try {
-            const hashDigitado = await gerarHashSHA256(tokenDigitado);
+            // Tenta buscar primeiro pelo campo 'usuario'
+            let { data, error } = await _supabase
+                .from('usuarios')
+                .select('*')
+                .eq('usuario', identificador)
+                .eq('senha', senha)
+                .maybeSingle();
 
-            const response = await fetch('./config.xlsx?v=' + new Date().getTime());
-            if (!response.ok) throw new Error("Erro ao carregar o arquivo de validação.");
+            // Se não encontrar pelo 'usuario', busca pelo 'e-mail'
+            if (!data && !error) {
+                const resultEmail = await _supabase
+                    .from('usuarios')
+                    .select('*')
+                    .eq('e-mail', identificador)
+                    .eq('senha', senha)
+                    .maybeSingle();
 
-            const arrayBuffer = await response.arrayBuffer();
-            const data = new Uint8Array(arrayBuffer);
-            const workbook = XLSX.read(data, { type: 'array' });
-            
-            const primeiraAba = workbook.Sheets[workbook.SheetNames[0]];
-            const hashSalvoNaPlanilha = primeiraAba && primeiraAba['A1'] ? String(primeiraAba['A1'].v).trim() : '';
+                data = resultEmail.data;
+                error = resultEmail.error;
+            }
 
-            if (hashDigitado.toLowerCase() === hashSalvoNaPlanilha.toLowerCase()) {
+            if (error) throw error;
+
+            if (!data) {
+                authError.innerText = '❌ Usuário, e-mail ou senha incorretos.';
+                authError.style.display = 'block';
+            } else if (data.situacao_acesso && data.situacao_acesso.toLowerCase() === 'off') {
+                authError.innerText = '🚫 Acesso suspenso ou inativo.';
+                authError.style.display = 'block';
+            } else {
+                // Sucesso na autenticação
                 document.getElementById('auth-overlay').style.display = 'none';
                 document.getElementById('main-app').style.display = 'block';
                 carregarPlanilhaExcelAutomatico();
-            } else {
-                authError.style.display = 'block';
-                authError.innerText = '❌ Token incorreto!';
             }
         } catch (err) {
-            console.error("Erro na validação:", err);
+            console.error("Erro na consulta do banco:", err);
+            authError.innerText = '❌ Erro de conexão com o banco de dados. Verifique a RLS policy.';
             authError.style.display = 'block';
-            authError.innerText = '❌ Erro de validação. O arquivo config.xlsx não foi encontrado.';
+        } finally {
+            btnLogin.disabled = false;
+            btnLogin.innerText = 'Acessar Sistema';
         }
     }
 
-    document.getElementById('input-token').addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') validarToken();
+    // Permitir dar Enter nos inputs de login
+    document.getElementById('input-senha').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') validarLogin();
+    });
+    document.getElementById('input-identificador').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') validarLogin();
     });
 
     async function carregarPlanilhaExcelAutomatico() {
@@ -318,27 +332,23 @@
         } catch(e) {}
     }
 
-function sairDoSistema() {
-    // 1. Limpa os dados armazenados na sessão/memória local
-    bancoDadosProdutos = [];
-    ultimaLeitura = "";
-    
-    if (document.getElementById('manual-code')) {
-        document.getElementById('manual-code').value = "";
-    }
-    if (document.getElementById('result-box')) {
-        document.getElementById('result-box').style.display = "none";
-    }
+    function sairDoSistema() {
+        bancoDadosProdutos = [];
+        ultimaLeitura = "";
+        
+        if (document.getElementById('manual-code')) {
+            document.getElementById('manual-code').value = "";
+        }
+        if (document.getElementById('result-box')) {
+            document.getElementById('result-box').style.display = "none";
+        }
 
-    // 2. Tenta fechar a aba atual
-    window.close();
-
-    // 3. Se o navegador bloquear o fechamento (comportamento padrão),
-    // substitui a página atual no histórico e redireciona para o Google
-    setTimeout(() => {
-        window.location.replace("https://www.google.com");
-    }, 100);
-}
+        // Volta para a tela de Login
+        document.getElementById('main-app').style.display = 'none';
+        document.getElementById('auth-overlay').style.display = 'flex';
+        document.getElementById('input-identificador').value = '';
+        document.getElementById('input-senha').value = '';
+    }
 </script>
 
 </body>
