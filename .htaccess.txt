@@ -1,0 +1,24 @@
+# =========================================================
+# .htaccess - Protege config.xlsx e produtos.xlsx contra
+# acesso direto via URL, permitindo apenas o fetch() feito
+# pelo próprio index.html deste site.
+# =========================================================
+
+RewriteEngine On
+
+# Bloqueia qualquer requisição a arquivos .xlsx cujo "Referer"
+# (origem da requisição) não seja o próprio domínio do site.
+# Troque "SEUDOMINIO.COM" pelo seu domínio real (sem https://, sem www se não usar).
+RewriteCond %{THE_REQUEST} \.xlsx [NC]
+RewriteCond %{HTTP_REFERER} !^https?://(www\.)?SEUDOMINIO\.COM [NC]
+RewriteRule \.xlsx$ - [F,L]
+
+# Impede a listagem de arquivos da pasta (evita que alguém veja
+# a lista de arquivos navegando até a raiz do site sem index).
+Options -Indexes
+
+# Bloqueia acesso a este próprio arquivo de configuração.
+<Files ".htaccess">
+    Order allow,deny
+    Deny from all
+</Files>
