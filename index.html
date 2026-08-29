@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="google" content="notranslate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consulta de Promoções</title>
+    <title>Consulta e Balanço de Estoque</title>
     
     <!-- Bibliotecas: Supabase, SheetJS e Html5-QRCode -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -44,16 +44,21 @@
         .container { background: #ffffff; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
         h1 { color: #d32f2f; margin-top: 0; font-size: 24px; }
         
+        /* Menu de Navegação */
+        .nav-menu { display: flex; gap: 10px; margin-bottom: 20px; }
+        .nav-btn { flex: 1; padding: 12px; border: none; background-color: #e0e0e0; color: #333; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 15px; }
+        .nav-btn.active { background-color: #d32f2f; color: white; }
+
         #status-db { font-size: 13px; margin-bottom: 15px; padding: 10px; border-radius: 8px; font-weight: bold; }
         .loading { background: #fff3cd; color: #856404; }
         .ready { background: #d4edda; color: #155724; display: none; }
         .error { background: #f8d7da; color: #721c24; }
 
-        #reader { width: 100%; max-width: 400px; margin: 15px auto; border-radius: 10px; overflow: hidden; border: 1px solid #ddd; background: #fafafa; }
-        #reader button { padding: 10px 15px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin: 10px 0; }
-        #reader select { padding: 8px; border-radius: 5px; border: 1px solid #ccc; margin-bottom: 10px; }
+        .scanner-box { width: 100%; max-width: 400px; margin: 15px auto; border-radius: 10px; overflow: hidden; border: 1px solid #ddd; background: #fafafa; }
+        .scanner-box button { padding: 10px 15px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin: 10px 0; }
+        .scanner-box select { padding: 8px; border-radius: 5px; border: 1px solid #ccc; margin-bottom: 10px; }
 
-        #result-box { margin-top: 20px; padding: 15px; border-radius: 10px; display: none; text-align: left; }
+        .result-box { margin-top: 20px; padding: 15px; border-radius: 10px; display: none; text-align: left; }
         .found { background-color: #e8f5e9; border-left: 6px solid #2e7d32; }
         .not-found { background-color: #ffebee; border-left: 6px solid #c62828; }
         .product-title { font-size: 18px; font-weight: bold; color: #333; margin-bottom: 5px; }
@@ -61,20 +66,23 @@
         .product-code { font-size: 12px; color: #777; }
 
         .manual-input { margin-top: 15px; display: flex; gap: 5px; }
-        .manual-input input { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
-        .manual-input button { padding: 12px 18px; background: #007bff; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        .manual-input input, .form-balanco input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 15px; }
+        .manual-input button, .form-balanco button { padding: 12px 18px; background: #007bff; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+
+        /* Formulário de Balanço e Cadastro */
+        .form-balanco { display: flex; flex-direction: column; gap: 10px; text-align: left; margin-top: 15px; }
+        .form-balanco label { font-size: 13px; font-weight: bold; color: #555; }
+        .btn-green { background-color: #28a745 !important; }
+        .btn-excel { background-color: #17a2b8 !important; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; margin-top: 20px; }
 
         .suporte-box {
-            margin-top: 30px;
-            padding-top: 15px;
-            border-top: 1px dashed #ccc;
-            text-align: center;
-            font-size: 13px;
-            color: #555;
+            margin-top: 30px; padding-top: 15px; border-top: 1px dashed #ccc;
+            text-align: center; font-size: 13px; color: #555;
         }
         .suporte-box p { margin: 0 0 6px 0; font-weight: bold; color: #333; }
         .suporte-contatos { display: flex; flex-direction: column; gap: 5px; }
         .suporte-contatos span { color: #444; }
+        
         .btn-sair {
             margin-top: 15px; width: 100%; padding: 12px;
             background-color: #7d6f6c; color: white; border: none;
@@ -102,20 +110,71 @@
 <!-- Interface Principal da Aplicação -->
 <div id="main-app">
     <div class="container">
-        <h1>🔥 CONSULTA PROMOÇÕES 🔥</h1>
-        <h2>Wilian Software</h2>
-        <div id="status-db" class="loading">Sincronizando produtos promocionais...</div>
-
-        <div id="reader"></div>
-
-        <div id="result-box">
-            <div id="res-conteudo"></div>
+        <!-- Navegação de Páginas -->
+        <div class="nav-menu">
+            <button id="btn-tab-promocao" class="nav-btn active" onclick="trocarPagina('promocao')">🔥 Promoções</button>
+            <button id="btn-tab-balanco" class="nav-btn" onclick="trocarPagina('balanco')">📦 Balanço</button>
         </div>
 
-        <div class="manual-input">
-            <input type="text" id="manual-code" placeholder="Digite o código de barras">
-            <button onclick="buscarPorCodigo(document.getElementById('manual-code').value)">Buscar</button>
+        <!-- ================= PÁGINA 1: PROMOÇÕES ================= -->
+        <div id="page-promocao">
+            <h1>🔥 CONSULTA PROMOÇÕES 🔥</h1>
+            <h2>Wilian Software</h2>
+            <div id="status-db" class="loading">Sincronizando produtos promocionais...</div>
+
+            <div id="reader-promocao" class="scanner-box"></div>
+
+            <div id="result-box-promocao" class="result-box">
+                <div id="res-conteudo-promocao"></div>
+            </div>
+
+            <div class="manual-input">
+                <input type="text" id="manual-code-promocao" placeholder="Digite o código de barras">
+                <button onclick="buscarPorCodigoPromocao(document.getElementById('manual-code-promocao').value)">Buscar</button>
+            </div>
+
+            <button onclick="trocarPagina('balanco')" class="btn-navegar" style="margin-top: 15px; width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">
+                📦 Ir para Balanço de Estoque
+            </button>
         </div>
+
+        <!-- ================= PÁGINA 2: BALANÇO DE ESTOQUE ================= -->
+        <div id="page-balanco" style="display: none;">
+            <h1>📦 BALANÇO DE ESTOQUE</h1>
+            <h2>Wilian Software</h2>
+
+            <div id="reader-balanco" class="scanner-box"></div>
+
+            <div class="manual-input">
+                <input type="text" id="manual-code-balanco" placeholder="Código de barras">
+                <button onclick="buscarProdutoBalanco(document.getElementById('manual-code-balanco').value)">Buscar</button>
+            </div>
+
+            <div id="result-box-balanco" class="result-box">
+                <div id="res-conteudo-balanco"></div>
+            </div>
+
+            <!-- Formulário de Envio Rápido para balanco_estoque -->
+            <div id="form-registro-balanco" class="form-balanco" style="display: none;">
+                <div id="box-descricao-manual" style="display: none;">
+                    <label style="color: #c62828;">Descrição (Obrigatória para não cadastrados):</label>
+                    <input type="text" id="bal-descricao-manual" placeholder="Digite o nome/descrição do produto">
+                </div>
+                <div>
+                    <label>Tamanho do Produto (Opcional):</label>
+                    <input type="text" id="bal-tamanho" placeholder="Ex: G, 42 (Pode deixar em branco)">
+                </div>
+                <div>
+                    <label>Entrada (Padrão 1 por bip):</label>
+                    <input type="number" id="bal-quantidade" value="1" min="1">
+                </div>
+                <button class="btn-green" onclick="enviarParaBalancoEstoque()">🚀 Enviar para Balanço de Estoque</button>
+            </div>
+
+            <!-- Botão de Exportação -->
+            <button class="btn-excel" onclick="exportarBalancoExcel()">📊 Exportar Balanço em Excel (.xlsx)</button>
+        </div>
+
         <button type="button" onclick="sairDoSistema()" class="btn-sair">🚪 Sair do Sistema</button>
 
         <!-- ÁREA DE SUPORTE -->
@@ -130,22 +189,41 @@
 </div>
 
 <script>
-    // ==========================================
-    // CONFIGURAÇÃO DO SUPABASE
-    // ==========================================
-    const SUPABASE_URL = 'https://sglmlcwzzjlrqthkmovq.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNnbG1sY3d6empscnF0aGttb3ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NTU0MzEsImV4cCI6MjEwMTMzMTQzMX0.YtxgLeWrflL8EW7ye6ou0-ZyOpHAjud0z4XH7CYPS4w';
-    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // ==================================================
+    // BANCO 1: Promoções / Usuários (Projeto Atual)
+    // ==================================================
+    const SUPABASE_URL_1 = 'https://sglmlcwzzjlrqthkmovq.supabase.co';
+    const SUPABASE_KEY_1 = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNnbG1sY3d6empscnF0aGttb3ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NTU0MzEsImV4cCI6MjEwMTMzMTQzMX0.YtxgLeWrflL8EW7ye6ou0-ZyOpHAjud0z4XH7CYPS4w';
+    const supabasePromocoes = supabase.createClient(SUPABASE_URL_1, SUPABASE_KEY_1);
+
+    // ==================================================
+    // BANCO 2: Balanço de Estoque (Novo Banco)
+    // ==================================================
+    const SUPABASE_URL_2 = 'https://lqoqvbtvmzivmsugyzxz.supabase.co';
+    const SUPABASE_KEY_2 = 'sb_publishable_kyXiNrX0IOMAF6ozR2FuxA_hMQVhhov';
+    const supabaseBalanco = supabase.createClient(SUPABASE_URL_2, SUPABASE_KEY_2);
 
     let bancoDadosProdutos = [];
-    let ultimaLeitura = "";
-    let travamentoLeitura = false;
+    let scannerPromocao = null;
+    let scannerBalanco = null;
+    let produtoBalancoEncontrado = null;
 
     const statusDb = document.getElementById('status-db');
-    const resultBox = document.getElementById('result-box');
-    const resConteudo = document.getElementById('res-conteudo');
 
-    // Função de Validação do Login
+    // Troca de Aba (SPA)
+    function trocarPagina(aba) {
+        document.getElementById('page-promocao').style.display = aba === 'promocao' ? 'block' : 'none';
+        document.getElementById('page-balanco').style.display = aba === 'balanco' ? 'block' : 'none';
+        
+        document.getElementById('btn-tab-promocao').className = aba === 'promocao' ? 'nav-btn active' : 'nav-btn';
+        document.getElementById('btn-tab-balanco').className = aba === 'balanco' ? 'nav-btn active' : 'nav-btn';
+
+        if (aba === 'balanco' && !scannerBalanco) {
+            iniciarScannerBalanco();
+        }
+    }
+
+    // Autenticação (Banco 1)
     async function validarLogin() {
         const identificador = document.getElementById('input-identificador').value.trim();
         const senha = document.getElementById('input-senha').value.trim();
@@ -164,17 +242,15 @@
         btnLogin.innerText = 'Verificando...';
 
         try {
-            // Tenta buscar primeiro pelo campo 'usuario'
-            let { data, error } = await _supabase
+            let { data, error } = await supabasePromocoes
                 .from('usuarios')
                 .select('*')
                 .eq('usuario', identificador)
                 .eq('senha', senha)
                 .maybeSingle();
 
-            // Se não encontrar pelo 'usuario', busca pelo 'e-mail'
             if (!data && !error) {
-                const resultEmail = await _supabase
+                const resultEmail = await supabasePromocoes
                     .from('usuarios')
                     .select('*')
                     .eq('e-mail', identificador)
@@ -194,14 +270,14 @@
                 authError.innerText = '🚫 Acesso suspenso ou inativo.';
                 authError.style.display = 'block';
             } else {
-                // Sucesso na autenticação
                 document.getElementById('auth-overlay').style.display = 'none';
                 document.getElementById('main-app').style.display = 'block';
                 carregarPlanilhaExcelAutomatico();
+                iniciarScannerPromocao();
             }
         } catch (err) {
             console.error("Erro na consulta do banco:", err);
-            authError.innerText = '❌ Erro de conexão com o banco de dados. Verifique a RLS policy.';
+            authError.innerText = '❌ Erro de conexão com o banco de dados.';
             authError.style.display = 'block';
         } finally {
             btnLogin.disabled = false;
@@ -209,14 +285,7 @@
         }
     }
 
-    // Permitir dar Enter nos inputs de login
-    document.getElementById('input-senha').addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') validarLogin();
-    });
-    document.getElementById('input-identificador').addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') validarLogin();
-    });
-
+    // PÁGINA 1: CONSULTA PROMOÇÕES
     async function carregarPlanilhaExcelAutomatico() {
         try {
             const response = await fetch('./produtos.xlsx?v=' + new Date().getTime());
@@ -244,32 +313,30 @@
                 };
             }).filter(p => p.codigo !== '');
 
-            if (bancoDadosProdutos.length === 0) throw new Error("Planilha vazia");
-
             if (statusDb) statusDb.className = "ready";
-            iniciarScannerPronto();
 
         } catch (err) {
             console.error("Erro detalhado:", err);
             if (statusDb) {
                 statusDb.className = 'error';
-                statusDb.innerHTML = '❌ Falha de sincronização. Verifique se o arquivo produtos.xlsx está na mesma pasta.';
+                statusDb.innerHTML = '❌ Falha ao carregar produtos.xlsx.';
             }
         }
     }
 
-    function buscarPorCodigo(codigoEscaneado) {
+    function buscarPorCodigoPromocao(codigoEscaneado) {
         if (!codigoEscaneado || bancoDadosProdutos.length === 0) return;
         
         const normalizar = (str) => String(str || '').trim().replace(/^0+/, '');
         const codigoLimpo = normalizar(codigoEscaneado);
-
         const produto = bancoDadosProdutos.find(p => normalizar(p.codigo) === codigoLimpo);
 
+        const resultBox = document.getElementById('result-box-promocao');
+        const resConteudo = document.getElementById('res-conteudo-promocao');
         resultBox.style.display = "block";
 
         if (produto) {
-            resultBox.className = "found";
+            resultBox.className = "result-box found";
             const valorNumerico = parseFloat(String(produto.preco).replace(',', '.'));
             const precoFormatado = isNaN(valorNumerico) 
                 ? produto.preco 
@@ -283,7 +350,7 @@
             `;
             tocarBip();
         } else {
-            resultBox.className = "not-found";
+            resultBox.className = "result-box not-found";
             resConteudo.innerHTML = `
                 <div class="product-title" style="color: #c62828;">Produto não cadastrado</div>
                 <div class="product-code">O código <strong>${codigoEscaneado}</strong> não está em promoção.</div>
@@ -291,33 +358,192 @@
         }
     }
 
-    function iniciarScannerPronto() {
-        const html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader",
-            { 
-                fps: 15, 
-                qrbox: { width: 280, height: 120 },
-                aspectRatio: 1.0
-            },
-            false
-        );
+    function iniciarScannerPromocao() {
+        scannerPromocao = new Html5QrcodeScanner("reader-promocao", { fps: 15, qrbox: { width: 280, height: 120 } }, false);
+        scannerPromocao.render((decodedText) => {
+            document.getElementById('manual-code-promocao').value = decodedText;
+            buscarPorCodigoPromocao(decodedText);
+        });
+    }
 
-        html5QrcodeScanner.render(
-            (decodedText) => {
-                if (decodedText === ultimaLeitura && travamentoLeitura) return;
-                
-                ultimaLeitura = decodedText;
-                travamentoLeitura = true;
-                
-                const inputManual = document.getElementById('manual-code');
-                if (inputManual) inputManual.value = decodedText;
-                
-                buscarPorCodigo(decodedText);
-                
-                setTimeout(() => { travamentoLeitura = false; }, 2000);
-            },
-            (errorMessage) => {}
-        );
+    // ==================================================
+    // PÁGINA 2: BALANÇO DE ESTOQUE (BANCO 2)
+    // ==================================================
+    function iniciarScannerBalanco() {
+        scannerBalanco = new Html5QrcodeScanner("reader-balanco", { fps: 15, qrbox: { width: 280, height: 120 } }, false);
+        scannerBalanco.render((decodedText) => {
+            document.getElementById('manual-code-balanco').value = decodedText;
+            buscarProdutoBalanco(decodedText);
+        });
+    }
+
+    // Busca o produto na tabela balanco_cadastro
+    async function buscarProdutoBalanco(codigo) {
+        if (!codigo) return;
+
+        const resultBox = document.getElementById('result-box-balanco');
+        const resConteudo = document.getElementById('res-conteudo-balanco');
+        const formRegistro = document.getElementById('form-registro-balanco');
+        const boxDescricaoManual = document.getElementById('box-descricao-manual');
+
+        resultBox.style.display = "none";
+        formRegistro.style.display = "none";
+        boxDescricaoManual.style.display = "none";
+        document.getElementById('bal-tamanho').value = '';
+        document.getElementById('bal-quantidade').value = 1;
+        document.getElementById('bal-descricao-manual').value = '';
+
+        try {
+            const { data, error } = await supabaseBalanco
+                .from('balanco_cadastro')
+                .select('*')
+                .eq('codigo', codigo.trim())
+                .maybeSingle();
+
+            if (error) throw error;
+
+            resultBox.style.display = "block";
+
+            if (data) {
+                produtoBalancoEncontrado = data;
+                resultBox.className = "result-box found";
+                resConteudo.innerHTML = `
+                    <div class="product-title">${produtoBalancoEncontrado.descricao}</div>
+                    <div class="product-code">Código: ${produtoBalancoEncontrado.codigo}</div>
+                `;
+                tocarBip();
+            } else {
+                produtoBalancoEncontrado = null;
+                resultBox.className = "result-box not-found";
+                resConteudo.innerHTML = `
+                    <div class="product-title" style="color: #c62828;">PRODUTO NÃO CADASTRADO NO BALANÇO</div>
+                    <div class="product-code">Informe a descrição abaixo para conseguir enviar.</div>
+                `;
+                boxDescricaoManual.style.display = "block";
+            }
+
+            formRegistro.style.display = "flex";
+
+        } catch (err) {
+            console.error("Erro ao buscar em balanco_cadastro:", err);
+            alert("Erro ao consultar balanco_cadastro: " + err.message);
+        }
+    }
+
+    // Envia o item bipado para a tabela balanco_estoque
+async function enviarParaBalancoEstoque() {
+    const codigo = document.getElementById('manual-code-balanco').value.trim();
+    let descricao = produtoBalancoEncontrado ? produtoBalancoEncontrado.descricao : document.getElementById('bal-descricao-manual').value.trim();
+    const tamanho = document.getElementById('bal-tamanho').value.trim();
+    
+    // Captura o valor exato digitado no campo de quantidade
+    const quantidadeInput = document.getElementById('bal-quantidade').value;
+    const quantidade = parseInt(quantidadeInput) || 1;
+
+    // Resgata os valores do cadastro ou define 0 como padrão para evitar erro de NOT NULL
+    const valor = produtoBalancoEncontrado && produtoBalancoEncontrado.valor ? produtoBalancoEncontrado.valor : 0;
+    const valorPromocao = produtoBalancoEncontrado && produtoBalancoEncontrado.valor_promocao ? produtoBalancoEncontrado.valor_promocao : null;
+
+    // Validações de segurança
+    if (!codigo) {
+        alert("⚠️ Código do produto inválido!");
+        return;
+    }
+    if (!descricao) {
+        alert("⚠️ PRODUTO SEM CADASTRO! Digite a descrição do produto antes de enviar.");
+        return;
+    }
+
+    try {
+        // Busca se este produto + tamanho já existem em balanco_estoque
+        const { data, error } = await supabaseBalanco
+            .from('balanco_estoque')
+            .select('*')
+            .eq('codigo', codigo)
+            .eq('tamanho', tamanho)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (data) {
+            // Se já existe, soma a quantidade existente com a nova quantidade digitada
+            const novaQtd = Number(data.quantidade || 0) + quantidade;
+
+            const { error: updateErr } = await supabaseBalanco
+                .from('balanco_estoque')
+                .update({ 
+                    quantidade: novaQtd,
+                    valor: valor,
+                    valor_promocao: valorPromocao
+                })
+                .eq('id', data.id);
+
+            if (updateErr) throw updateErr;
+            alert(`✅ +${quantidade} un. adicionadas! Total acumulado (${tamanho || 'Sem Tamanho'}): ${novaQtd}`);
+        } else {
+            // Se não existe, cria a nova linha no banco com a quantidade exata digitada
+            const { error: insertErr } = await supabaseBalanco
+                .from('balanco_estoque')
+                .insert([{
+                    codigo: codigo,
+                    descricao: descricao,
+                    tamanho: tamanho,
+                    quantidade: quantidade,
+                    valor: valor,
+                    valor_promocao: valorPromocao
+                }]);
+
+            if (insertErr) throw insertErr;
+            alert(`✅ Registrado com sucesso! Quantidade lançada: ${quantidade}`);
+        }
+
+        // Limpa e reseta a tela para a próxima contagem
+        document.getElementById('result-box-balanco').style.display = "none";
+        document.getElementById('form-registro-balanco').style.display = "none";
+        document.getElementById('manual-code-balanco').value = "";
+        document.getElementById('bal-quantidade').value = "1";
+        produtoBalancoEncontrado = null;
+
+    } catch (err) {
+        console.error("Erro ao enviar para balanco_estoque:", err);
+        alert("❌ Erro ao enviar produto: " + err.message);
+    }
+}
+
+    // Exporta todo o balanço feito na tabela balanco_estoque para Excel (.xlsx)
+    async function exportarBalancoExcel() {
+        try {
+            const { data, error } = await supabaseBalanco
+                .from('balanco_estoque')
+                .select('codigo, descricao, tamanho, quantidade, created_at');
+
+            if (error) throw error;
+
+            if (!data || data.length === 0) {
+                alert("⚠️ Nenhum registro encontrado no balanço de estoque para exportar.");
+                return;
+            }
+
+            // Trata e formata os dados para o arquivo Excel
+            const dadosFormatados = data.map(item => ({
+                'Código de Barras': item.codigo,
+                'Descrição': item.descricao,
+                'Tamanho': item.tamanho || 'N/A',
+                'Quantidade Contada': item.quantidade,
+                'Data do Registro': item.created_at ? new Date(item.created_at).toLocaleString('pt-BR') : ''
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Balanço Realizado");
+
+            const dataAtual = new Date().toISOString().slice(0,10);
+            XLSX.writeFile(workbook, `Balanco_Estoque_${dataAtual}.xlsx`);
+
+        } catch (err) {
+            console.error("Erro ao exportar:", err);
+            alert("❌ Falha ao exportar relatório em Excel: " + err.message);
+        }
     }
 
     function tocarBip() {
@@ -334,22 +560,19 @@
 
     function sairDoSistema() {
         bancoDadosProdutos = [];
-        ultimaLeitura = "";
-        
-        if (document.getElementById('manual-code')) {
-            document.getElementById('manual-code').value = "";
-        }
-        if (document.getElementById('result-box')) {
-            document.getElementById('result-box').style.display = "none";
-        }
-
-        // Volta para a tela de Login
         document.getElementById('main-app').style.display = 'none';
         document.getElementById('auth-overlay').style.display = 'flex';
         document.getElementById('input-identificador').value = '';
         document.getElementById('input-senha').value = '';
     }
-</script>
 
+    // Atalhos de Enter para o formulário
+    document.getElementById('input-senha').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') validarLogin();
+    });
+    document.getElementById('input-identificador').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') validarLogin();
+    });
+</script>
 </body>
 </html>
