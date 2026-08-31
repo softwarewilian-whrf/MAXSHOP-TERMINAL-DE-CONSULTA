@@ -154,11 +154,17 @@
                 <div id="res-conteudo-balanco"></div>
             </div>
 
-            <!-- Formulário de Envio Rápido para balanco_estoque -->
+            <!-- Formulário de Envio Rápido / Cadastro -->
             <div id="form-registro-balanco" class="form-balanco" style="display: none;">
-                <div id="box-descricao-manual" style="display: none;">
-                    <label style="color: #c62828;">Descrição (Obrigatoria para não cadastrados):</label>
-                    <input type="text" id="bal-descricao-manual" placeholder="Digite o nome/descrição do produto">
+                <div id="box-campos-manual" style="display: none;">
+                    <div>
+                        <label style="color: #c62828;">Descrição (Obrigatória para não cadastrados):</label>
+                        <input type="text" id="bal-descricao-manual" placeholder="Digite a descrição do produto">
+                    </div>
+                    <div style="margin-top: 8px;">
+                        <label style="color: #c62828;">Valor do produto (Obrigatório):</label>
+                        <input type="number" step="0.01" id="bal-valor-manual" placeholder="Ex: 49.90">
+                    </div>
                 </div>
                 <div>
                     <label>Tamanho do Produto (Opcional):</label>
@@ -168,7 +174,7 @@
                     <label>Entrada (Padrão 1 por bip):</label>
                     <input type="number" id="bal-quantidade" value="1" min="1">
                 </div>
-                <button class="btn-green" onclick="enviarParaBalancoEstoque()">🚀 Enviar para Balanço de Estoque</button>
+                <button id="btn-submit-balanco" class="btn-green" onclick="enviarParaBalancoEstoque()">🚀 Enviar para Balanço de Estoque</button>
             </div>
 
             <!-- Botão de Exportação -->
@@ -208,23 +214,12 @@
 
     // Troca de Aba com Liberação da Câmera
     async function trocarPagina(aba) {
-        // Para a câmera da aba promocao antes de alternar
         if (scannerPromocao) {
-            try {
-                await scannerPromocao.clear();
-            } catch (e) {
-                console.log("Erro ao fechar scanner promoção:", e);
-            }
+            try { await scannerPromocao.clear(); } catch (e) {}
             scannerPromocao = null;
         }
-
-        // Para a câmera da aba balanço antes de alternar
         if (scannerBalanco) {
-            try {
-                await scannerBalanco.clear();
-            } catch (e) {
-                console.log("Erro ao fechar scanner balanço:", e);
-            }
+            try { await scannerBalanco.clear(); } catch (e) {}
             scannerBalanco = null;
         }
 
@@ -234,7 +229,6 @@
         document.getElementById('btn-tab-promocao').className = aba === 'promocao' ? 'nav-btn active' : 'nav-btn';
         document.getElementById('btn-tab-balanco').className = aba === 'balanco' ? 'nav-btn active' : 'nav-btn';
 
-        // Inicia a câmera correspondente após renderizar a div na tela
         setTimeout(() => {
             if (aba === 'promocao') {
                 iniciarScannerPromocao();
@@ -404,14 +398,16 @@
         const resultBox = document.getElementById('result-box-balanco');
         const resConteudo = document.getElementById('res-conteudo-balanco');
         const formRegistro = document.getElementById('form-registro-balanco');
-        const boxDescricaoManual = document.getElementById('box-descricao-manual');
+        const boxCamposManual = document.getElementById('box-campos-manual');
+        const btnSubmit = document.getElementById('btn-submit-balanco');
 
         resultBox.style.display = "none";
         formRegistro.style.display = "none";
-        boxDescricaoManual.style.display = "none";
+        boxCamposManual.style.display = "none";
         document.getElementById('bal-tamanho').value = '';
         document.getElementById('bal-quantidade').value = 1;
         document.getElementById('bal-descricao-manual').value = '';
+        document.getElementById('bal-valor-manual').value = '';
 
         try {
             const { data, error } = await supabaseBalanco
@@ -431,15 +427,17 @@
                     <div class="product-title">${produtoBalancoEncontrado.descricao}</div>
                     <div class="product-code">Código: ${produtoBalancoEncontrado.codigo}</div>
                 `;
+                btnSubmit.innerText = "Enviar para Balanço de Estoque";
                 tocarBip();
             } else {
                 produtoBalancoEncontrado = null;
                 resultBox.className = "result-box not-found";
                 resConteudo.innerHTML = `
                     <div class="product-title" style="color: #c62828;">PRODUTO NÃO CADASTRADO NO BALANÇO</div>
-                    <div class="product-code">Informe a descrição abaixo para conseguir enviar.</div>
+                    <div class="product-code">Preencha as informações do produto abaixo.</div>
                 `;
-                boxDescricaoManual.style.display = "block";
+                boxCamposManual.style.display = "block";
+                btnSubmit.innerText = "ENVIAR PARA CADASTRO E BALANÇO";
             }
 
             formRegistro.style.display = "flex";
@@ -452,24 +450,57 @@
 
     async function enviarParaBalancoEstoque() {
         const codigo = document.getElementById('manual-code-balanco').value.trim();
-        let descricao = produtoBalancoEncontrado ? produtoBalancoEncontrado.descricao : document.getElementById('bal-descricao-manual').value.trim();
         const tamanho = document.getElementById('bal-tamanho').value.trim();
-        
         const quantidadeInput = document.getElementById('bal-quantidade').value;
         const quantidade = parseInt(quantidadeInput) || 1;
-
-        const valor = produtoBalancoEncontrado && produtoBalancoEncontrado.valor ? produtoBalancoEncontrado.valor : 0;
-        const valorPromocao = produtoBalancoEncontrado && produtoBalancoEncontrado.valor_promocao ? produtoBalancoEncontrado.valor_promocao : null;
 
         if (!codigo) {
             alert("⚠️ Código do produto inválido!");
             return;
         }
-        if (!descricao) {
-            alert("⚠️ PRODUTO SEM CADASTRO! Digite a descrição do produto antes de enviar.");
-            return;
+
+        let descricao = "";
+        let valor = 0;
+        let valorPromocao = null;
+
+        if (produtoBalancoEncontrado) {
+            descricao = produtoBalancoEncontrado.descricao;
+            valor = produtoBalancoEncontrado.valor || 0;
+            valorPromocao = produtoBalancoEncontrado.valor_promocao || null;
+        } else {
+            // Se o produto for novo, faz as validações obrigatórias
+            descricao = document.getElementById('bal-descricao-manual').value.trim();
+            const valorInput = document.getElementById('bal-valor-manual').value;
+            valor = parseFloat(valorInput);
+
+            if (!descricao) {
+                alert("⚠️ Descrição (Obrigatória para não cadastrados) não preenchida!");
+                return;
+            }
+            if (isNaN(valor) || valor <= 0) {
+                alert("⚠️ Valor do produto (Obrigatório) é inválido ou não foi informado!");
+                return;
+            }
+
+            // Cadastra automaticamente na tabela balanco_cadastro
+            try {
+                const { error: insertCadErr } = await supabaseBalanco
+                    .from('balanco_cadastro')
+                    .insert([{
+                        codigo: codigo,
+                        descricao: descricao,
+                        valor: valor
+                    }]);
+
+                if (insertCadErr) throw insertCadErr;
+            } catch (errCad) {
+                console.error("Erro ao salvar cadastro do produto:", errCad);
+                alert("❌ Falha ao cadastrar o produto em balanco_cadastro: " + errCad.message);
+                return;
+            }
         }
 
+        // Lança a contagem no estoque
         try {
             const { data, error } = await supabaseBalanco
                 .from('balanco_estoque')
@@ -510,6 +541,7 @@
                 alert(`✅ Registrado com sucesso! Quantidade lançada: ${quantidade}`);
             }
 
+            // Reseta a interface
             document.getElementById('result-box-balanco').style.display = "none";
             document.getElementById('form-registro-balanco').style.display = "none";
             document.getElementById('manual-code-balanco').value = "";
