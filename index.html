@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="google" content="notranslate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consulta e Balanço de Estoque</title>
+    <title>Consulta e Balanço de Estoque</title> 
     
     <!-- Bibliotecas: Supabase, SheetJS e Html5-QRCode -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -157,7 +157,7 @@
             <!-- Formulário de Envio Rápido para balanco_estoque -->
             <div id="form-registro-balanco" class="form-balanco" style="display: none;">
                 <div id="box-descricao-manual" style="display: none;">
-                    <label style="color: #c62828;">Descrição (Obrigatória para não cadastrados):</label>
+                    <label style="color: #c62828;">Descrição (Obrigatoria para não cadastrados):</label>
                     <input type="text" id="bal-descricao-manual" placeholder="Digite o nome/descrição do produto">
                 </div>
                 <div>
@@ -189,16 +189,12 @@
 </div>
 
 <script>
-    // ==================================================
-    // BANCO 1: Promoções / Usuários (Projeto Atual)
-    // ==================================================
+    // BANCO 1: Promoções / Usuários
     const SUPABASE_URL_1 = 'https://sglmlcwzzjlrqthkmovq.supabase.co';
     const SUPABASE_KEY_1 = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNnbG1sY3d6empscnF0aGttb3ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NTU0MzEsImV4cCI6MjEwMTMzMTQzMX0.YtxgLeWrflL8EW7ye6ou0-ZyOpHAjud0z4XH7CYPS4w';
     const supabasePromocoes = supabase.createClient(SUPABASE_URL_1, SUPABASE_KEY_1);
 
-    // ==================================================
-    // BANCO 2: Balanço de Estoque (Novo Banco)
-    // ==================================================
+    // BANCO 2: Balanço de Estoque
     const SUPABASE_URL_2 = 'https://lqoqvbtvmzivmsugyzxz.supabase.co';
     const SUPABASE_KEY_2 = 'sb_publishable_kyXiNrX0IOMAF6ozR2FuxA_hMQVhhov';
     const supabaseBalanco = supabase.createClient(SUPABASE_URL_2, SUPABASE_KEY_2);
@@ -210,20 +206,45 @@
 
     const statusDb = document.getElementById('status-db');
 
-    // Troca de Aba (SPA)
-    function trocarPagina(aba) {
+    // Troca de Aba com Liberação da Câmera
+    async function trocarPagina(aba) {
+        // Para a câmera da aba promocao antes de alternar
+        if (scannerPromocao) {
+            try {
+                await scannerPromocao.clear();
+            } catch (e) {
+                console.log("Erro ao fechar scanner promoção:", e);
+            }
+            scannerPromocao = null;
+        }
+
+        // Para a câmera da aba balanço antes de alternar
+        if (scannerBalanco) {
+            try {
+                await scannerBalanco.clear();
+            } catch (e) {
+                console.log("Erro ao fechar scanner balanço:", e);
+            }
+            scannerBalanco = null;
+        }
+
         document.getElementById('page-promocao').style.display = aba === 'promocao' ? 'block' : 'none';
         document.getElementById('page-balanco').style.display = aba === 'balanco' ? 'block' : 'none';
         
         document.getElementById('btn-tab-promocao').className = aba === 'promocao' ? 'nav-btn active' : 'nav-btn';
         document.getElementById('btn-tab-balanco').className = aba === 'balanco' ? 'nav-btn active' : 'nav-btn';
 
-        if (aba === 'balanco' && !scannerBalanco) {
-            iniciarScannerBalanco();
-        }
+        // Inicia a câmera correspondente após renderizar a div na tela
+        setTimeout(() => {
+            if (aba === 'promocao') {
+                iniciarScannerPromocao();
+            } else if (aba === 'balanco') {
+                iniciarScannerBalanco();
+            }
+        }, 100);
     }
 
-    // Autenticação (Banco 1)
+    // Autenticação
     async function validarLogin() {
         const identificador = document.getElementById('input-identificador').value.trim();
         const senha = document.getElementById('input-senha').value.trim();
@@ -359,6 +380,7 @@
     }
 
     function iniciarScannerPromocao() {
+        if (scannerPromocao) return;
         scannerPromocao = new Html5QrcodeScanner("reader-promocao", { fps: 15, qrbox: { width: 280, height: 120 } }, false);
         scannerPromocao.render((decodedText) => {
             document.getElementById('manual-code-promocao').value = decodedText;
@@ -366,10 +388,9 @@
         });
     }
 
-    // ==================================================
-    // PÁGINA 2: BALANÇO DE ESTOQUE (BANCO 2)
-    // ==================================================
+    // PÁGINA 2: BALANÇO DE ESTOQUE
     function iniciarScannerBalanco() {
+        if (scannerBalanco) return;
         scannerBalanco = new Html5QrcodeScanner("reader-balanco", { fps: 15, qrbox: { width: 280, height: 120 } }, false);
         scannerBalanco.render((decodedText) => {
             document.getElementById('manual-code-balanco').value = decodedText;
@@ -377,7 +398,6 @@
         });
     }
 
-    // Busca o produto na tabela balanco_cadastro
     async function buscarProdutoBalanco(codigo) {
         if (!codigo) return;
 
@@ -430,87 +450,78 @@
         }
     }
 
-    // Envia o item bipado para a tabela balanco_estoque
-async function enviarParaBalancoEstoque() {
-    const codigo = document.getElementById('manual-code-balanco').value.trim();
-    let descricao = produtoBalancoEncontrado ? produtoBalancoEncontrado.descricao : document.getElementById('bal-descricao-manual').value.trim();
-    const tamanho = document.getElementById('bal-tamanho').value.trim();
-    
-    // Captura o valor exato digitado no campo de quantidade
-    const quantidadeInput = document.getElementById('bal-quantidade').value;
-    const quantidade = parseInt(quantidadeInput) || 1;
+    async function enviarParaBalancoEstoque() {
+        const codigo = document.getElementById('manual-code-balanco').value.trim();
+        let descricao = produtoBalancoEncontrado ? produtoBalancoEncontrado.descricao : document.getElementById('bal-descricao-manual').value.trim();
+        const tamanho = document.getElementById('bal-tamanho').value.trim();
+        
+        const quantidadeInput = document.getElementById('bal-quantidade').value;
+        const quantidade = parseInt(quantidadeInput) || 1;
 
-    // Resgata os valores do cadastro ou define 0 como padrão para evitar erro de NOT NULL
-    const valor = produtoBalancoEncontrado && produtoBalancoEncontrado.valor ? produtoBalancoEncontrado.valor : 0;
-    const valorPromocao = produtoBalancoEncontrado && produtoBalancoEncontrado.valor_promocao ? produtoBalancoEncontrado.valor_promocao : null;
+        const valor = produtoBalancoEncontrado && produtoBalancoEncontrado.valor ? produtoBalancoEncontrado.valor : 0;
+        const valorPromocao = produtoBalancoEncontrado && produtoBalancoEncontrado.valor_promocao ? produtoBalancoEncontrado.valor_promocao : null;
 
-    // Validações de segurança
-    if (!codigo) {
-        alert("⚠️ Código do produto inválido!");
-        return;
-    }
-    if (!descricao) {
-        alert("⚠️ PRODUTO SEM CADASTRO! Digite a descrição do produto antes de enviar.");
-        return;
-    }
-
-    try {
-        // Busca se este produto + tamanho já existem em balanco_estoque
-        const { data, error } = await supabaseBalanco
-            .from('balanco_estoque')
-            .select('*')
-            .eq('codigo', codigo)
-            .eq('tamanho', tamanho)
-            .maybeSingle();
-
-        if (error) throw error;
-
-        if (data) {
-            // Se já existe, soma a quantidade existente com a nova quantidade digitada
-            const novaQtd = Number(data.quantidade || 0) + quantidade;
-
-            const { error: updateErr } = await supabaseBalanco
-                .from('balanco_estoque')
-                .update({ 
-                    quantidade: novaQtd,
-                    valor: valor,
-                    valor_promocao: valorPromocao
-                })
-                .eq('id', data.id);
-
-            if (updateErr) throw updateErr;
-            alert(`✅ +${quantidade} un. adicionadas! Total acumulado (${tamanho || 'Sem Tamanho'}): ${novaQtd}`);
-        } else {
-            // Se não existe, cria a nova linha no banco com a quantidade exata digitada
-            const { error: insertErr } = await supabaseBalanco
-                .from('balanco_estoque')
-                .insert([{
-                    codigo: codigo,
-                    descricao: descricao,
-                    tamanho: tamanho,
-                    quantidade: quantidade,
-                    valor: valor,
-                    valor_promocao: valorPromocao
-                }]);
-
-            if (insertErr) throw insertErr;
-            alert(`✅ Registrado com sucesso! Quantidade lançada: ${quantidade}`);
+        if (!codigo) {
+            alert("⚠️ Código do produto inválido!");
+            return;
+        }
+        if (!descricao) {
+            alert("⚠️ PRODUTO SEM CADASTRO! Digite a descrição do produto antes de enviar.");
+            return;
         }
 
-        // Limpa e reseta a tela para a próxima contagem
-        document.getElementById('result-box-balanco').style.display = "none";
-        document.getElementById('form-registro-balanco').style.display = "none";
-        document.getElementById('manual-code-balanco').value = "";
-        document.getElementById('bal-quantidade').value = "1";
-        produtoBalancoEncontrado = null;
+        try {
+            const { data, error } = await supabaseBalanco
+                .from('balanco_estoque')
+                .select('*')
+                .eq('codigo', codigo)
+                .eq('tamanho', tamanho)
+                .maybeSingle();
 
-    } catch (err) {
-        console.error("Erro ao enviar para balanco_estoque:", err);
-        alert("❌ Erro ao enviar produto: " + err.message);
+            if (error) throw error;
+
+            if (data) {
+                const novaQtd = Number(data.quantidade || 0) + quantidade;
+
+                const { error: updateErr } = await supabaseBalanco
+                    .from('balanco_estoque')
+                    .update({ 
+                        quantidade: novaQtd,
+                        valor: valor,
+                        valor_promocao: valorPromocao
+                    })
+                    .eq('id', data.id);
+
+                if (updateErr) throw updateErr;
+                alert(`✅ +${quantidade} un. adicionadas! Total acumulado (${tamanho || 'Sem Tamanho'}): ${novaQtd}`);
+            } else {
+                const { error: insertErr } = await supabaseBalanco
+                    .from('balanco_estoque')
+                    .insert([{
+                        codigo: codigo,
+                        descricao: descricao,
+                        tamanho: tamanho,
+                        quantidade: quantidade,
+                        valor: valor,
+                        valor_promocao: valorPromocao
+                    }]);
+
+                if (insertErr) throw insertErr;
+                alert(`✅ Registrado com sucesso! Quantidade lançada: ${quantidade}`);
+            }
+
+            document.getElementById('result-box-balanco').style.display = "none";
+            document.getElementById('form-registro-balanco').style.display = "none";
+            document.getElementById('manual-code-balanco').value = "";
+            document.getElementById('bal-quantidade').value = "1";
+            produtoBalancoEncontrado = null;
+
+        } catch (err) {
+            console.error("Erro ao enviar para balanco_estoque:", err);
+            alert("❌ Erro ao enviar produto: " + err.message);
+        }
     }
-}
 
-    // Exporta todo o balanço feito na tabela balanco_estoque para Excel (.xlsx)
     async function exportarBalancoExcel() {
         try {
             const { data, error } = await supabaseBalanco
@@ -524,7 +535,6 @@ async function enviarParaBalancoEstoque() {
                 return;
             }
 
-            // Trata e formata os dados para o arquivo Excel
             const dadosFormatados = data.map(item => ({
                 'Código de Barras': item.codigo,
                 'Descrição': item.descricao,
@@ -558,7 +568,16 @@ async function enviarParaBalancoEstoque() {
         } catch(e) {}
     }
 
-    function sairDoSistema() {
+    async function sairDoSistema() {
+        if (scannerPromocao) {
+            try { await scannerPromocao.clear(); } catch(e){}
+            scannerPromocao = null;
+        }
+        if (scannerBalanco) {
+            try { await scannerBalanco.clear(); } catch(e){}
+            scannerBalanco = null;
+        }
+
         bancoDadosProdutos = [];
         document.getElementById('main-app').style.display = 'none';
         document.getElementById('auth-overlay').style.display = 'flex';
@@ -566,7 +585,6 @@ async function enviarParaBalancoEstoque() {
         document.getElementById('input-senha').value = '';
     }
 
-    // Atalhos de Enter para o formulário
     document.getElementById('input-senha').addEventListener('keypress', function (e) {
         if (e.key === 'Enter') validarLogin();
     });
