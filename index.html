@@ -64,6 +64,7 @@
         .product-title { font-size: 18px; font-weight: bold; color: #333; margin-bottom: 5px; }
         .product-price { font-size: 32px; font-weight: 900; color: #e53935; margin-top: 5px; }
         .product-code { font-size: 12px; color: #777; }
+        .product-stock { font-size: 14px; font-weight: bold; color: #155724; margin-top: 5px; }
 
         .manual-input { margin-top: 15px; display: flex; gap: 5px; }
         .manual-input input, .form-balanco input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 15px; }
@@ -73,7 +74,15 @@
         .form-balanco { display: flex; flex-direction: column; gap: 10px; text-align: left; margin-top: 15px; }
         .form-balanco label { font-size: 13px; font-weight: bold; color: #555; }
         .btn-green { background-color: #28a745 !important; }
+        .btn-warning { background-color: #ff9800 !important; color: white; }
+        .btn-blue { background-color: #17a2b8 !important; color: white; }
         .btn-excel { background-color: #17a2b8 !important; color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; margin-top: 20px; }
+
+        /* Edição de Cadastro */
+        .box-edicao {
+            background: #fff3e0; border: 1px solid #ffe0b2; padding: 12px;
+            border-radius: 8px; margin-top: 10px; display: none; flex-direction: column; gap: 8px;
+        }
 
         .suporte-box {
             margin-top: 30px; padding-top: 15px; border-top: 1px dashed #ccc;
@@ -154,6 +163,27 @@
                 <div id="res-conteudo-balanco"></div>
             </div>
 
+            <!-- Botão para Abrir Edição de Cadastro -->
+            <button id="btn-abrir-editar" class="btn-blue" style="display: none; width: 100%; margin-top: 10px; padding: 10px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;" onclick="toggleEdicaoCadastro()">✏️ Alterar Cadastro / Estoque</button>
+
+            <!-- Painel de Alteração de Cadastro -->
+            <div id="box-edicao-cadastro" class="box-edicao">
+                <h4 style="margin: 0 0 5px 0; color: #e65100;">✏️ Alterar Dados do Produto</h4>
+                <div>
+                    <label style="font-size: 12px; font-weight: bold;">Descrição:</label>
+                    <input type="text" id="edit-descricao" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: bold;">Valor (R$):</label>
+                    <input type="number" step="0.01" id="edit-valor" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: bold;">Quantidade Atual em Estoque (Sobrescrever):</label>
+                    <input type="number" id="edit-quantidade" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+                </div>
+                <button onclick="salvarAlteracaoCadastro()" class="btn-warning" style="padding: 10px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: 5px;">💾 Salvar Alterações</button>
+            </div>
+
             <!-- Formulário de Envio Rápido / Cadastro -->
             <div id="form-registro-balanco" class="form-balanco" style="display: none;">
                 <div id="box-campos-manual" style="display: none;">
@@ -209,6 +239,7 @@
     let scannerPromocao = null;
     let scannerBalanco = null;
     let produtoBalancoEncontrado = null;
+    let quantidadeEstoqueAtual = 0;
 
     const statusDb = document.getElementById('status-db');
 
@@ -400,10 +431,15 @@
         const formRegistro = document.getElementById('form-registro-balanco');
         const boxCamposManual = document.getElementById('box-campos-manual');
         const btnSubmit = document.getElementById('btn-submit-balanco');
+        const btnAbrirEditar = document.getElementById('btn-abrir-editar');
+        const boxEdicao = document.getElementById('box-edicao-cadastro');
 
         resultBox.style.display = "none";
         formRegistro.style.display = "none";
         boxCamposManual.style.display = "none";
+        btnAbrirEditar.style.display = "none";
+        boxEdicao.style.display = "none";
+
         document.getElementById('bal-tamanho').value = '';
         document.getElementById('bal-quantidade').value = 1;
         document.getElementById('bal-descricao-manual').value = '';
@@ -422,15 +458,39 @@
 
             if (data) {
                 produtoBalancoEncontrado = data;
+
+                // Buscar quantidade acumulada no balanço de estoque
+                const { data: estoqueData } = await supabaseBalanco
+                    .from('balanco_estoque')
+                    .select('quantidade')
+                    .eq('codigo', codigo.trim());
+
+                quantidadeEstoqueAtual = estoqueData ? estoqueData.reduce((acc, curr) => acc + Number(curr.quantidade || 0), 0) : 0;
+
+                const valorFormatado = (data.valor !== null && data.valor !== undefined) 
+                    ? parseFloat(data.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) 
+                    : 'Não informado';
+
                 resultBox.className = "result-box found";
                 resConteudo.innerHTML = `
                     <div class="product-title">${produtoBalancoEncontrado.descricao}</div>
                     <div class="product-code">Código: ${produtoBalancoEncontrado.codigo}</div>
+                    <div class="product-stock">💰 Valor: ${valorFormatado}</div>
+                    <div class="product-stock">📊 Quantidade Contada no Estoque: <strong>${quantidadeEstoqueAtual} un.</strong></div>
                 `;
+
                 btnSubmit.innerText = "Enviar para Balanço de Estoque";
+                btnAbrirEditar.style.display = "block";
+
+                // Preenche campos de edição
+                document.getElementById('edit-descricao').value = produtoBalancoEncontrado.descricao || '';
+                document.getElementById('edit-valor').value = produtoBalancoEncontrado.valor || '';
+                document.getElementById('edit-quantidade').value = quantidadeEstoqueAtual;
+
                 tocarBip();
             } else {
                 produtoBalancoEncontrado = null;
+                quantidadeEstoqueAtual = 0;
                 resultBox.className = "result-box not-found";
                 resConteudo.innerHTML = `
                     <div class="product-title" style="color: #c62828;">PRODUTO NÃO CADASTRADO NO BALANÇO</div>
@@ -445,6 +505,90 @@
         } catch (err) {
             console.error("Erro ao buscar em balanco_cadastro:", err);
             alert("Erro ao consultar balanco_cadastro: " + err.message);
+        }
+    }
+
+    function toggleEdicaoCadastro() {
+        const boxEdicao = document.getElementById('box-edicao-cadastro');
+        boxEdicao.style.display = (boxEdicao.style.display === 'flex' || boxEdicao.style.display === 'block') ? 'none' : 'flex';
+    }
+
+    async function salvarAlteracaoCadastro() {
+        const codigo = document.getElementById('manual-code-balanco').value.trim();
+        const novaDescricao = document.getElementById('edit-descricao').value.trim();
+        const novoValor = parseFloat(document.getElementById('edit-valor').value);
+        const novaQtd = parseInt(document.getElementById('edit-quantidade').value);
+
+        if (!codigo) {
+            alert("⚠️ Código inválido!");
+            return;
+        }
+        if (!novaDescricao) {
+            alert("⚠️ Descrição não pode ficar em branco!");
+            return;
+        }
+        if (isNaN(novoValor) || novoValor <= 0) {
+            alert("⚠️ Insira um valor válido!");
+            return;
+        }
+
+        try {
+            // 1. Atualiza balanco_cadastro
+            const { error: errCad } = await supabaseBalanco
+                .from('balanco_cadastro')
+                .update({ descricao: novaDescricao, valor: novoValor })
+                .eq('codigo', codigo);
+
+            if (errCad) throw errCad;
+
+            // 2. Atualiza registros no estoque (descricao e valor)
+            await supabaseBalanco
+                .from('balanco_estoque')
+                .update({ descricao: novaDescricao, valor: novoValor })
+                .eq('codigo', codigo);
+
+            // 3. Se a quantidade foi alterada diretamente
+            if (!isNaN(novaQtd) && novaQtd >= 0) {
+                const { data: estoqueData } = await supabaseBalanco
+                    .from('balanco_estoque')
+                    .select('id')
+                    .eq('codigo', codigo);
+
+                if (estoqueData && estoqueData.length > 0) {
+                    // Atualiza o primeiro registro com a nova quantidade e zera os adicionais se houver
+                    await supabaseBalanco
+                        .from('balanco_estoque')
+                        .update({ quantidade: novaQtd })
+                        .eq('id', estoqueData[0].id);
+
+                    if (estoqueData.length > 1) {
+                        for (let i = 1; i < estoqueData.length; i++) {
+                            await supabaseBalanco
+                                .from('balanco_estoque')
+                                .update({ quantidade: 0 })
+                                .eq('id', estoqueData[i].id);
+                        }
+                    }
+                } else {
+                    // Se não existia lançamento no estoque ainda, cria um
+                    await supabaseBalanco
+                        .from('balanco_estoque')
+                        .insert([{
+                            codigo: codigo,
+                            descricao: novaDescricao,
+                            tamanho: '',
+                            quantidade: novaQtd,
+                            valor: novoValor
+                        }]);
+                }
+            }
+
+            alert("✅ Cadastro e estoque atualizados com sucesso!");
+            buscarProdutoBalanco(codigo);
+
+        } catch (err) {
+            console.error("Erro ao alterar cadastro:", err);
+            alert("❌ Falha ao alterar cadastro: " + err.message);
         }
     }
 
@@ -544,6 +688,8 @@
             // Reseta a interface
             document.getElementById('result-box-balanco').style.display = "none";
             document.getElementById('form-registro-balanco').style.display = "none";
+            document.getElementById('box-edicao-cadastro').style.display = "none";
+            document.getElementById('btn-abrir-editar').style.display = "none";
             document.getElementById('manual-code-balanco').value = "";
             document.getElementById('bal-quantidade').value = "1";
             produtoBalancoEncontrado = null;
