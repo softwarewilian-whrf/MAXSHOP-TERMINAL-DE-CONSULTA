@@ -240,10 +240,13 @@
     let scannerBalanco = null;
     let produtoBalancoEncontrado = null;
     let quantidadeEstoqueAtual = 0;
+    
+    // Trava de leitura para evitar múltiplos bipees e requisições repetidas
+    let processandoLeituraPromocao = false;
+    let processandoLeituraBalanco = false;
 
     const statusDb = document.getElementById('status-db');
 
-    // Função auxiliar para remover zeros à esquerda de qualquer código
     function normalizarCodigo(str) {
         if (!str) return '';
         const limpo = String(str).trim().replace(/^0+/, '');
@@ -274,6 +277,9 @@
             try { await scannerBalanco.clear(); } catch (e) {}
             scannerBalanco = null;
         }
+
+        processandoLeituraPromocao = false;
+        processandoLeituraBalanco = false;
 
         document.getElementById('page-promocao').style.display = aba === 'promocao' ? 'block' : 'none';
         document.getElementById('page-balanco').style.display = aba === 'balanco' ? 'block' : 'none';
@@ -392,7 +398,13 @@
     }
 
     function buscarPorCodigoPromocao(codigoEscaneado) {
-        if (!codigoEscaneado || bancoDadosProdutos.length === 0) return;
+        if (!codigoEscaneado || bancoDadosProdutos.length === 0) {
+            processandoLeituraPromocao = false;
+            return;
+        }
+
+        // Toca o bip único imediatamente após capturar o código
+        tocarBip();
         
         const codigoLimpo = normalizarCodigo(codigoEscaneado);
         const produto = bancoDadosProdutos.find(p => normalizarCodigo(p.codigo) === codigoLimpo);
@@ -414,7 +426,6 @@
                 <div style="font-size: 14px; margin-top:10px; color:#555;">Preço de Promoção:</div>
                 <div class="product-price">${precoFormatado}</div>
             `;
-            tocarBip();
         } else {
             resultBox.className = "result-box not-found";
             resConteudo.innerHTML = `
@@ -422,12 +433,19 @@
                 <div class="product-code">O código <strong>${codigoEscaneado}</strong> não está em promoção.</div>
             `;
         }
+
+        // Libera para uma nova leitura após 2.5 segundos
+        setTimeout(() => {
+            processandoLeituraPromocao = false;
+        }, 2500);
     }
 
     function iniciarScannerPromocao() {
         if (scannerPromocao) return;
         scannerPromocao = new Html5QrcodeScanner("reader-promocao", { fps: 15, qrbox: { width: 280, height: 120 } }, false);
         scannerPromocao.render((decodedText) => {
+            if (processandoLeituraPromocao) return;
+            processandoLeituraPromocao = true;
             document.getElementById('manual-code-promocao').value = decodedText;
             buscarPorCodigoPromocao(decodedText);
         });
@@ -438,13 +456,26 @@
         if (scannerBalanco) return;
         scannerBalanco = new Html5QrcodeScanner("reader-balanco", { fps: 15, qrbox: { width: 280, height: 120 } }, false);
         scannerBalanco.render((decodedText) => {
+            if (processandoLeituraBalanco) return;
+            processandoLeituraBalanco = true;
             document.getElementById('manual-code-balanco').value = decodedText;
             buscarProdutoBalanco(decodedText);
         });
     }
 
     async function buscarProdutoBalanco(codigo) {
-        if (!codigo) return;
+        if (!codigo) {
+            processandoLeituraBalanco = false;
+            return;
+        }
+
+        // Toca o bip único no instante em que o código é identificado
+        tocarBip();
+
+        // Pausa o scanner temporariamente enquanto exibe as informações e formulário
+        if (scannerBalanco) {
+            try { scannerBalanco.pause(true); } catch(e) {}
+        }
 
         const resultBox = document.getElementById('result-box-balanco');
         const resConteudo = document.getElementById('res-conteudo-balanco');
@@ -469,7 +500,6 @@
         const codigoSemZeros = normalizarCodigo(codigo);
 
         try {
-            // Consulta no banco buscando tanto pelo código digitado quanto pelo código sem zeros
             let { data, error } = await supabaseBalanco
                 .from('balanco_cadastro')
                 .select('*')
@@ -483,7 +513,6 @@
             if (data) {
                 produtoBalancoEncontrado = data;
 
-                // Buscar quantidade acumulada no balanço de estoque
                 const { data: estoqueData } = await supabaseBalanco
                     .from('balanco_estoque')
                     .select('quantidade')
@@ -506,12 +535,10 @@
                 btnSubmit.innerText = "Enviar para Balanço de Estoque";
                 btnAbrirEditar.style.display = "block";
 
-                // Preenche campos de edição
                 document.getElementById('edit-descricao').value = produtoBalancoEncontrado.descricao || '';
                 document.getElementById('edit-valor').value = produtoBalancoEncontrado.valor || '';
                 document.getElementById('edit-quantidade').value = quantidadeEstoqueAtual;
 
-                tocarBip();
             } else {
                 produtoBalancoEncontrado = null;
                 quantidadeEstoqueAtual = 0;
@@ -529,6 +556,8 @@
         } catch (err) {
             console.error("Erro ao buscar em balanco_cadastro:", err);
             alert("Erro ao consultar balanco_cadastro: " + err.message);
+        } finally {
+            processandoLeituraBalanco = false;
         }
     }
 
@@ -559,7 +588,6 @@
         const codigoLimpo = produtoBalancoEncontrado ? produtoBalancoEncontrado.codigo : codigo;
 
         try {
-            // 1. Atualiza balanco_cadastro
             const { error: errCad } = await supabaseBalanco
                 .from('balanco_cadastro')
                 .update({ descricao: novaDescricao, valor: novoValor })
@@ -567,13 +595,11 @@
 
             if (errCad) throw errCad;
 
-            // 2. Atualiza registros no estoque (descricao e valor)
             await supabaseBalanco
                 .from('balanco_estoque')
                 .update({ descricao: novaDescricao, valor: novoValor })
                 .eq('codigo', codigoLimpo);
 
-            // 3. Se a quantidade foi alterada diretamente
             if (!isNaN(novaQtd) && novaQtd >= 0) {
                 const { data: estoqueData } = await supabaseBalanco
                     .from('balanco_estoque')
@@ -667,7 +693,6 @@
             }
         }
 
-        // Lança a contagem no estoque
         try {
             const { data, error } = await supabaseBalanco
                 .from('balanco_estoque')
@@ -711,9 +736,20 @@
             document.getElementById('result-box-balanco').style.display = "none";
             document.getElementById('form-registro-balanco').style.display = "none";
             document.getElementById('manual-code-balanco').value = "";
+
+            // Retoma a câmera do scanner após a conclusão da gravação
+            if (scannerBalanco) {
+                try { scannerBalanco.resume(); } catch(e) {}
+            }
+            processandoLeituraBalanco = false;
+
         } catch (err) {
             console.error("Erro ao enviar para balanço:", err);
             alert("❌ Falha ao registrar no estoque: " + err.message);
+            if (scannerBalanco) {
+                try { scannerBalanco.resume(); } catch(e) {}
+            }
+            processandoLeituraBalanco = false;
         }
     }
 
