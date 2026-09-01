@@ -12,6 +12,24 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
 
     <style>
+          /* Estilo da Logo na Tela de Login */
+.logo-login {
+    max-width: 360px;
+    height: auto;
+    margin-bottom: 15px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Estilo da Logo nas Páginas Internas */
+.logo-app {
+    max-width: 360px;
+    height: auto;
+    margin: 0 auto 15px auto;
+    display: block;
+}
+
         * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background-color: #f4f6f9; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
         
@@ -105,6 +123,12 @@
 <!-- Tela de Autenticação Supabase -->
 <div id="auth-overlay">
     <div class="auth-card">
+         <!-- Tela de Autenticação Supabase -->
+<div id="auth-overlay">
+    <div class="auth-card">
+        <!-- LOGO AQUI -->
+        <img src="logo.png" alt="Sent - Gestão e Balanço de Estoque" class="logo-login">
+        
         <h2>🔒 Acesso ao Sistema</h2>
         <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Informe suas credenciais para entrar.</p>
         
@@ -115,16 +139,29 @@
         <div id="auth-error"></div>
     </div>
 </div>
-
+        <h2>🔒 Acesso ao Sistema</h2>
+        <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Informe suas credenciais para entrar.</p>
+        
+        <input type="text" id="input-identificador" placeholder="Usuário ou E-mail">
+        <input type="password" id="input-senha" placeholder="Senha">
+        
+        <button id="btn-login" onclick="validarLogin()">Acessar Sistema</button>
+        <div id="auth-error"></div>
+    </div>
+</div>
+	
 <!-- Interface Principal da Aplicação -->
 <div id="main-app">
     <div class="container">
+        <!-- LOGO AQUI -->
+        <img src="logo.png" alt="Sent - Gestão e Balanço de Estoque" class="logo-app">
+
         <!-- Navegação de Páginas -->
         <div class="nav-menu">
             <button id="btn-tab-promocao" class="nav-btn active" onclick="trocarPagina('promocao')">🔥 Promoções</button>
             <button id="btn-tab-balanco" class="nav-btn" onclick="trocarPagina('balanco')">📦 Balanço</button>
         </div>
-
+       
         <!-- ================= PÁGINA 1: PROMOÇÕES ================= -->
         <div id="page-promocao">
             <h1>🔥 CONSULTA PROMOÇÕES 🔥</h1>
@@ -163,7 +200,7 @@
                 <div id="res-conteudo-balanco"></div>
             </div>
 
-            <!-- Botão para Abrir Edição de Cadastro (Apenas visível para Admin) -->
+            <!-- Botão para Abrir Edição de Cadastro -->
             <button id="btn-abrir-editar" class="btn-blue" style="display: none; width: 100%; margin-top: 10px; padding: 10px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;" onclick="toggleEdicaoCadastro()">✏️ Alterar Cadastro / Estoque</button>
 
             <!-- Painel de Alteração de Cadastro -->
@@ -240,7 +277,6 @@
     let scannerBalanco = null;
     let produtoBalancoEncontrado = null;
     let quantidadeEstoqueAtual = 0;
-    let usuarioLogado = null; // Armazena as informações do usuário autenticado
     
     // Trava de leitura para evitar múltiplos bipees e requisições repetidas
     let processandoLeituraPromocao = false;
@@ -297,7 +333,7 @@
         }, 100);
     }
 
-    // Autenticação com verificação de tipo_acesso e situacao_acesso
+    // Autenticação
     async function validarLogin() {
         const identificador = document.getElementById('input-identificador').value.trim();
         const senha = document.getElementById('input-senha').value.trim();
@@ -340,12 +376,10 @@
             if (!data) {
                 authError.innerText = '❌ Usuário, e-mail ou senha incorretos.';
                 authError.style.display = 'block';
-            } else if (!data.situacao_acesso || String(data.situacao_acesso).trim().toLowerCase() !== 'on') {
-                // Verificação estrita de situacao_acesso ("on" = liberado, "off" ou diferente de "on" = bloqueado)
-                authError.innerText = '🚫 Acesso suspenso ou inativo. Entre em contato com o suporte.';
+            } else if (data.situacao_acesso && data.situacao_acesso.toLowerCase() === 'off') {
+                authError.innerText = '🚫 Acesso suspenso ou inativo.';
                 authError.style.display = 'block';
             } else {
-                usuarioLogado = data; // Guarda o objeto do usuário logado
                 document.getElementById('auth-overlay').style.display = 'none';
                 document.getElementById('main-app').style.display = 'block';
                 carregarPlanilhaExcelAutomatico();
@@ -359,16 +393,6 @@
             btnLogin.disabled = false;
             btnLogin.innerText = 'Acessar Sistema';
         }
-    }
-
-    function sairDoSistema() {
-        usuarioLogado = null;
-        if (scannerPromocao) { try { scannerPromocao.clear(); } catch(e){} scannerPromocao = null; }
-        if (scannerBalanco) { try { scannerBalanco.clear(); } catch(e){} scannerBalanco = null; }
-        document.getElementById('main-app').style.display = 'none';
-        document.getElementById('auth-overlay').style.display = 'flex';
-        document.getElementById('input-identificador').value = '';
-        document.getElementById('input-senha').value = '';
     }
 
     // PÁGINA 1: CONSULTA PROMOÇÕES
@@ -416,6 +440,7 @@
             return;
         }
 
+        // Toca o bip único imediatamente após capturar o código
         tocarBip();
         
         const codigoLimpo = normalizarCodigo(codigoEscaneado);
@@ -446,6 +471,7 @@
             `;
         }
 
+        // Libera para uma nova leitura após 2.5 segundos
         setTimeout(() => {
             processandoLeituraPromocao = false;
         }, 2500);
@@ -480,8 +506,10 @@
             return;
         }
 
+        // Toca o bip único no instante em que o código é identificado
         tocarBip();
 
+        // Pausa o scanner temporariamente enquanto exibe as informações e formulário
         if (scannerBalanco) {
             try { scannerBalanco.pause(true); } catch(e) {}
         }
@@ -519,9 +547,6 @@
 
             resultBox.style.display = "block";
 
-            // Verifica se o usuário logado tem permissão Admin para exibir o botão de alteração
-            const eAdmin = usuarioLogado && String(usuarioLogado.tipo_acesso).trim().toLowerCase() === 'admin';
-
             if (data) {
                 produtoBalancoEncontrado = data;
 
@@ -545,11 +570,7 @@
                 `;
 
                 btnSubmit.innerText = "Enviar para Balanço de Estoque";
-                
-                // Exibe o botão apenas para Administrador
-                if (eAdmin) {
-                    btnAbrirEditar.style.display = "block";
-                }
+                btnAbrirEditar.style.display = "block";
 
                 document.getElementById('edit-descricao').value = produtoBalancoEncontrado.descricao || '';
                 document.getElementById('edit-valor').value = produtoBalancoEncontrado.valor || '';
@@ -578,23 +599,11 @@
     }
 
     function toggleEdicaoCadastro() {
-        // Bloqueia a abertura do painel se o perfil não for Admin
-        if (!usuarioLogado || String(usuarioLogado.tipo_acesso).trim().toLowerCase() !== 'admin') {
-            alert("⚠️ Apenas administradores possuem permissão para alterar o cadastro!");
-            return;
-        }
-
         const boxEdicao = document.getElementById('box-edicao-cadastro');
         boxEdicao.style.display = (boxEdicao.style.display === 'flex' || boxEdicao.style.display === 'block') ? 'none' : 'flex';
     }
 
     async function salvarAlteracaoCadastro() {
-        // Valida se o usuário logado é Admin
-        if (!usuarioLogado || String(usuarioLogado.tipo_acesso).trim().toLowerCase() !== 'admin') {
-            alert("⛔ Permissão Negada: Usuários comuns não podem fazer alterações de preço ou descrição do cadastro.");
-            return;
-        }
-
         const codigo = document.getElementById('manual-code-balanco').value.trim();
         const novaDescricao = document.getElementById('edit-descricao').value.trim();
         const novoValor = parseFloat(document.getElementById('edit-valor').value);
@@ -684,10 +693,12 @@
         const codigo = produtoBalancoEncontrado ? produtoBalancoEncontrado.codigo : codigoInput;
         let descricao = "";
         let valor = 0;
+        let valorPromocao = null;
 
         if (produtoBalancoEncontrado) {
             descricao = produtoBalancoEncontrado.descricao;
             valor = produtoBalancoEncontrado.valor || 0;
+            valorPromocao = produtoBalancoEncontrado.valor_promocao || null;
         } else {
             descricao = document.getElementById('bal-descricao-manual').value.trim();
             const valorInput = document.getElementById('bal-valor-manual').value;
@@ -712,34 +723,70 @@
                     }]);
 
                 if (insertCadErr) throw insertCadErr;
-            } catch (err) {
-                console.error("Erro ao cadastrar novo produto em balanco_cadastro:", err);
-                alert("❌ Falha ao cadastrar novo produto: " + err.message);
+            } catch (errCad) {
+                console.error("Erro ao salvar cadastro do produto:", errCad);
+                alert("❌ Falha ao cadastrar o produto em balanco_cadastro: " + errCad.message);
                 return;
             }
         }
 
         try {
-            const { error: insertEstErr } = await supabaseBalanco
+            const { data, error } = await supabaseBalanco
                 .from('balanco_estoque')
-                .insert([{
-                    codigo: codigo,
-                    descricao: descricao,
-                    tamanho: tamanho,
-                    quantidade: quantidade,
-                    valor: valor
-                }]);
+                .select('*')
+                .eq('codigo', codigo)
+                .eq('tamanho', tamanho)
+                .maybeSingle();
 
-            if (insertEstErr) throw insertEstErr;
+            if (error) throw error;
 
-            alert("✅ Item enviado para o balanço com sucesso!");
-            
-            // Recarrega os dados do produto para atualizar a contagem atual exibida na tela
-            buscarProdutoBalanco(codigo);
+            if (data) {
+                const novaQtd = Number(data.quantidade || 0) + quantidade;
+
+                const { error: updateErr } = await supabaseBalanco
+                    .from('balanco_estoque')
+                    .update({ 
+                        quantidade: novaQtd,
+                        valor: valor,
+                        valor_promocao: valorPromocao
+                    })
+                    .eq('id', data.id);
+
+                if (updateErr) throw updateErr;
+                alert(`✅ +${quantidade} un. adicionadas! Total acumulado (${tamanho || 'Sem Tamanho'}): ${novaQtd}`);
+            } else {
+                const { error: insertErr } = await supabaseBalanco
+                    .from('balanco_estoque')
+                    .insert([{
+                        codigo: codigo,
+                        descricao: descricao,
+                        tamanho: tamanho,
+                        quantidade: quantidade,
+                        valor: valor,
+                        valor_promocao: valorPromocao
+                    }]);
+
+                if (insertErr) throw insertErr;
+                alert(`✅ Registrado com sucesso! Quantidade lançada: ${quantidade}`);
+            }
+
+            document.getElementById('result-box-balanco').style.display = "none";
+            document.getElementById('form-registro-balanco').style.display = "none";
+            document.getElementById('manual-code-balanco').value = "";
+
+            // Retoma a câmera do scanner após a conclusão da gravação
+            if (scannerBalanco) {
+                try { scannerBalanco.resume(); } catch(e) {}
+            }
+            processandoLeituraBalanco = false;
 
         } catch (err) {
-            console.error("Erro ao registrar balanço:", err);
-            alert("❌ Falha ao registrar balanço no banco de dados: " + err.message);
+            console.error("Erro ao enviar para balanço:", err);
+            alert("❌ Falha ao registrar no estoque: " + err.message);
+            if (scannerBalanco) {
+                try { scannerBalanco.resume(); } catch(e) {}
+            }
+            processandoLeituraBalanco = false;
         }
     }
 
@@ -750,23 +797,26 @@
                 .select('*');
 
             if (error) throw error;
-
             if (!data || data.length === 0) {
-                alert("⚠️ Nenhum registro encontrado para exportar.");
+                alert("Nenhum dado encontrado para exportar.");
                 return;
             }
 
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Balanco");
-            XLSX.writeFile(wb, `balanco_estoque_${new Date().toISOString().slice(0,10)}.xlsx`);
-
+            const worksheet = XLSX.utils.json_to_sheet(data);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Balanço");
+            XLSX.writeFile(workbook, `Balanco_Estoque_${new Date().toISOString().slice(0,10)}.xlsx`);
         } catch (err) {
             console.error("Erro ao exportar Excel:", err);
-            alert("❌ Erro ao exportar os dados: " + err.message);
+            alert("❌ Erro ao exportar para Excel: " + err.message);
+        }
+    }
+
+    function sairDoSistema() {
+        if (confirm("Deseja realmente sair do sistema?")) {
+            location.reload();
         }
     }
 </script>
-
 </body>
 </html>
