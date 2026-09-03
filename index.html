@@ -230,11 +230,9 @@
                     <div style="margin-top:8px;"><label style="color:#c62828;">Valor do produto (Obrigatório):</label><input type="number" step="0.01" id="bal-valor-manual" placeholder="Ex: 49.90"></div>
                 </div>
                 <div><label>Tamanho do Produto (Opcional):</label><input type="text" id="bal-tamanho" placeholder="Ex: G, 42 (Pode deixar em branco)"></div>
-                <div><label>Tipo de armazenamento:</label>
-                    <select id="bal-tipo" style="width:100%;padding:12px;border:1px solid #ccc;border-radius:5px;">
-                        <option value="bloco">Bloco</option><option value="linha">Linha</option><option value="caixa_saco">Caixa/Saco</option>
-                    </select>
-                </div>
+                <div><label>Bloco (Opcional):</label><input type="text" id="bal-bloco" placeholder="Digite o bloco"></div>
+                <div><label>Linha (Opcional):</label><input type="text" id="bal-linha" placeholder="Digite a linha"></div>
+                <div><label>Caixa/Saco (Opcional):</label><input type="text" id="bal-caixa-saco" placeholder="Digite a caixa ou saco"></div>
                 <div><label>Entrada (Padrão 1 por bip):</label><input type="number" id="bal-quantidade" value="1" min="1"></div>
                 <button id="btn-submit-balanco" class="btn-green" onclick="enviarParaBalancoEstoque()">🚀 Enviar para Balanço de Estoque</button>
             </div>
@@ -375,7 +373,8 @@ async function validarLogin() {
  * São aceitos estes nomes de coluna (acentos e maiúsculas não importam):
  * loja, codigo, descricao, valor/preco, valor_promocao, quantidade_total,
  * quantidade_bloco/bolo, quantidade_linha, quantidade_caixa_saco,
- * tamanhos_bloco/bolo, tamanhos_linha, tamanhos_caixa_saco.
+ * tamanhos_bloco/bolo, tamanhos_linha, tamanhos_caixa_saco,
+ * bloco, linha, caixa_saco.
  */
 function nomeColuna(item, termos) {
     const normal = s => String(s).toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[_\-\s]/g,'');
@@ -675,6 +674,9 @@ async function buscarProdutoBalanco(codigo){
     editBox.style.display='none';
 
     document.getElementById('bal-tamanho').value='';
+    document.getElementById('bal-bloco').value='';
+    document.getElementById('bal-linha').value='';
+    document.getElementById('bal-caixa-saco').value='';
     document.getElementById('bal-quantidade').value=1;
     document.getElementById('bal-descricao-manual').value='';
     document.getElementById('bal-valor-manual').value='';
@@ -757,8 +759,13 @@ async function salvarAlteracaoCadastro(){
 }
 async function enviarParaBalancoEstoque(){
     if(!exigirLoja())return;
-    const codigoInput=document.getElementById('manual-code-balanco').value.trim(), tamanho=document.getElementById('bal-tamanho').value.trim();
-    const tipo=document.getElementById('bal-tipo').value, quantidade=parseInt(document.getElementById('bal-quantidade').value)||1;
+    const codigoInput=document.getElementById('manual-code-balanco').value.trim();
+    const tamanho=document.getElementById('bal-tamanho').value.trim();
+    const bloco=document.getElementById('bal-bloco').value.trim();
+    const linha=document.getElementById('bal-linha').value.trim();
+    const caixaSaco=document.getElementById('bal-caixa-saco').value.trim();
+    const quantidade=parseInt(document.getElementById('bal-quantidade').value)||1;
+    const tipo=bloco ? 'bloco' : (linha ? 'linha' : (caixaSaco ? 'caixa_saco' : 'bloco'));
     if(!codigoInput){alert('⚠️ Código do produto inválido!');return;}
     const codigo=produtoBalancoEncontrado?produtoBalancoEncontrado.codigo:codigoInput;
     let descricao='',valor=0,valorPromocao=null;
@@ -771,15 +778,49 @@ async function enviarParaBalancoEstoque(){
         if(error){alert('❌ Falha ao cadastrar: '+error.message);return;}
     }
     try{
-        let {data,error}=await supabaseBalanco.from('balanco_estoque').select('*').eq('codigo',codigo).eq('loja',lojaSelecionada).eq('tamanho',tamanho).eq('tipo_armazenamento',tipo).maybeSingle();
+        let {data,error}=await supabaseBalanco.from('balanco_estoque').select('*')
+            .eq('codigo',codigo)
+            .eq('loja',lojaSelecionada)
+            .eq('tamanho',tamanho)
+            .eq('bloco',bloco)
+            .eq('linha',linha)
+            .eq('caixa_saco',caixaSaco)
+            .maybeSingle();
         if(error)throw error;
         if(data){
             const novaQtd=Number(data.quantidade||0)+quantidade;
-            const {error:e}=await supabaseBalanco.from('balanco_estoque').update({quantidade:novaQtd,descricao,valor,valor_promocao:valorPromocao}).eq('id',data.id);
+            const {error:e}=await supabaseBalanco.from('balanco_estoque').update({
+                quantidade:novaQtd,
+                descricao,
+                valor,
+                valor_promocao:valorPromocao,
+                tamanho,
+                bloco,
+                linha,
+                caixa_saco:caixaSaco,
+                tipo_armazenamento:tipo
+            }).eq('id',data.id);
             if(e)throw e;
-            alert(`✅ +${quantidade} un. adicionadas! Total (${tipo}, ${tamanho||'Sem tamanho'}): ${novaQtd}`);
+            const localizacao = [
+                bloco ? `Bloco: ${bloco}` : '',
+                linha ? `Linha: ${linha}` : '',
+                caixaSaco ? `Caixa/Saco: ${caixaSaco}` : ''
+            ].filter(Boolean).join(' | ');
+            alert(`✅ +${quantidade} un. adicionadas! Total (${tamanho||'Sem tamanho'}${localizacao ? ' | ' + localizacao : ''}): ${novaQtd}`);
         }else{
-            const {error:e}=await supabaseBalanco.from('balanco_estoque').insert([{codigo,loja:lojaSelecionada,descricao,tamanho, tipo_armazenamento:tipo,quantidade,valor,valor_promocao:valorPromocao}]);
+            const {error:e}=await supabaseBalanco.from('balanco_estoque').insert([{
+                codigo,
+                loja:lojaSelecionada,
+                descricao,
+                tamanho,
+                bloco,
+                linha,
+                caixa_saco:caixaSaco,
+                tipo_armazenamento:tipo,
+                quantidade,
+                valor,
+                valor_promocao:valorPromocao
+            }]);
             if(e)throw e; alert(`✅ Registrado com sucesso! Quantidade lançada: ${quantidade}`);
         }
         document.getElementById('result-box-balanco').style.display='none';document.getElementById('form-registro-balanco').style.display='none';document.getElementById('manual-code-balanco').value='';
