@@ -917,7 +917,7 @@
                     await supabaseBalanco.from('balanco_estoque').update({ quantidade: qtd, descricao: desc, valor: valor, valor_promocao: valorPromo }).eq('id', rows[0].id);
                     for (let i = 1; i < rows.length; i++) await supabaseBalanco.from('balanco_estoque').update({ quantidade: 0 }).eq('id', rows[i].id);
                 } else {
-                    await supabaseBalanco.from('balanco_estoque').insert([{ codigo: codigoStr, loja: lojaStr, descricao: desc, tamanho: '', tipo_armazenamento: 'bloco', quantidade: qtd, valor: valor, valor_promocao: valorPromo }]);
+                    await supabaseBalanco.from('balanco_estoque').insert([{ codigo: codigoStr, loja: lojaStr, descricao: desc, tamanho: '', quantidade: qtd, valor: valor, valor_promocao: valorPromo }]);
                 }
             }
             alert('✅ Cadastro e estoque atualizados com sucesso!');
@@ -937,7 +937,6 @@
         const linha = document.getElementById('bal-linha').value.trim();
         const caixaSaco = document.getElementById('bal-caixa-saco').value.trim();
         const quantidade = parseInt(document.getElementById('bal-quantidade').value) || 1;
-        const tipo = bloco ? 'bloco' : (linha ? 'linha' : (caixaSaco ? 'caixa_saco' : 'bloco'));
         
         // Salva persistentemente o valor do Bloco para os próximos lançamentos
         salvarBlocoSessao(bloco);
@@ -992,8 +991,7 @@
                     tamanho,
                     bloco,
                     linha,
-                    caixa_saco: caixaSaco,
-                    tipo_armazenamento: tipo
+                    caixa_saco: caixaSaco
                 }).eq('id', data.id);
                 
                 if (e) throw e;
@@ -1013,7 +1011,6 @@
                     bloco,
                     linha,
                     caixa_saco: caixaSaco,
-                    tipo_armazenamento: tipo,
                     quantidade,
                     valor,
                     valor_promocao: valorPromocao
