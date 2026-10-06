@@ -408,6 +408,7 @@
 
     function normalizarCodigo(str) {
         if (!str) return '';
+        // Converte estritamente para string preservando todos os zeros à esquerda (ex: 000000256360)
         return String(str).trim();
     }
     function escaparHTML(v) {
@@ -463,7 +464,7 @@
         
         document.getElementById('setup-loja').value = lojaSelecionada || '';
         document.getElementById('setup-operador').value = operadorSelecionado || '';
-        document.getElementById('setup-lote').value = ''; // Limpa o lote para o usuário digitar o novo
+        document.getElementById('setup-lote').value = ''; 
         document.getElementById('setup-error').style.display = 'none';
         document.getElementById('setup-overlay').style.display = 'flex';
     }
@@ -680,7 +681,7 @@
         if (erroCadastro) console.error("Erro ao buscar cadastro:", erroCadastro);
 
         const { data: estoque, error: erroEstoque } = await supabaseBalanco
-            .from('balanco_estoque')
+            .from('Balanco_MaxShop')
             .select('*')
             .eq('codigo', codStr)
             .eq('loja', lojaStr);
@@ -932,24 +933,26 @@
         
         const codigoStr = String(produtoBalancoEncontrado ? produtoBalancoEncontrado.codigo : codigo).trim();
         const lojaStr = String(lojaSelecionada).trim();
+        const operadorStr = String(operadorSelecionado).trim();
         
         try {
             const { error: e } = await supabaseBalanco.from('balanco_cadastro').update({ 
                 descricao: desc, 
                 valor: valor,
-                valor_promocao: valorPromo 
+                valor_promocao: valorPromo,
+                operador: operadorStr
             }).eq('codigo', codigoStr).eq('loja', lojaStr);
             
             if (e) throw e;
             
             if (!isNaN(qtd) && qtd >= 0) {
-                const { data: rows, error: er } = await supabaseBalanco.from('balanco_estoque').select('id').eq('codigo', codigoStr).eq('loja', lojaStr);
+                const { data: rows, error: er } = await supabaseBalanco.from('Balanco_MaxShop').select('id').eq('codigo', codigoStr).eq('loja', lojaStr);
                 if (er) throw er;
                 if (rows && rows.length) {
-                    await supabaseBalanco.from('balanco_estoque').update({ quantidade: qtd, descricao: desc, valor: valor, valor_promocao: valorPromo }).eq('id', rows[0].id);
-                    for (let i = 1; i < rows.length; i++) await supabaseBalanco.from('balanco_estoque').update({ quantidade: 0 }).eq('id', rows[i].id);
+                    await supabaseBalanco.from('Balanco_MaxShop').update({ quantidade: qtd, descricao: desc, valor: valor, valor_promocao: valorPromo, operador: operadorStr }).eq('id', rows[0].id);
+                    for (let i = 1; i < rows.length; i++) await supabaseBalanco.from('Balanco_MaxShop').update({ quantidade: 0, operador: operadorStr }).eq('id', rows[i].id);
                 } else {
-                    await supabaseBalanco.from('balanco_estoque').insert([{ codigo: codigoStr, loja: lojaStr, descricao: desc, tamanho: '', quantidade: qtd, valor: valor, valor_promocao: valorPromo }]);
+                    await supabaseBalanco.from('Balanco_MaxShop').insert([{ codigo: codigoStr, loja: lojaStr, descricao: desc, tamanho: '', quantidade: qtd, valor: valor, valor_promocao: valorPromo, operador: operadorStr }]);
                 }
             }
             alert('✅ Cadastro e estoque atualizados com sucesso!');
@@ -974,6 +977,7 @@
         if (!codigoFormatado) { alert('⚠️ Código do produto inválido!'); return; }
         const codigoStr = String(produtoBalancoEncontrado ? produtoBalancoEncontrado.codigo : codigoFormatado).trim();
         const lojaStr = String(lojaSelecionada).trim();
+        const operadorStr = String(operador).trim();
         
         let descricao = '', valor = 0, valorPromocao = null;
         if (produtoBalancoEncontrado) {
@@ -994,7 +998,8 @@
                 loja: lojaStr, 
                 descricao, 
                 valor, 
-                valor_promocao: valorPromocao 
+                valor_promocao: valorPromocao,
+                operador: operadorStr
             }]);
             if (error) { alert('❌ Falha ao cadastrar: ' + error.message); return; }
         }
@@ -1003,7 +1008,7 @@
             const blocoVal = bloco !== '' ? bloco : null;
             const linhaVal = linha !== '' ? linha : null;
 
-            let query = supabaseBalanco.from('balanco_estoque').select('*')
+            let query = supabaseBalanco.from('Balanco_MaxShop').select('*')
                 .eq('codigo', codigoStr)
                 .eq('loja', lojaStr)
                 .eq('tamanho', tamanho)
@@ -1021,7 +1026,7 @@
 
             if (data) {
                 const novaQtd = Number(data.quantidade || 0) + quantidade;
-                const { error: e } = await supabaseBalanco.from('balanco_estoque').update({
+                const { error: e } = await supabaseBalanco.from('Balanco_MaxShop').update({
                     quantidade: novaQtd,
                     descricao,
                     valor,
@@ -1029,7 +1034,8 @@
                     tamanho,
                     bloco: blocoVal,
                     linha: linhaVal,
-                    caixa_saco: caixaSaco
+                    caixa_saco: caixaSaco,
+                    operador: operadorStr
                 }).eq('id', data.id);
                 
                 if (e) throw e;
@@ -1041,7 +1047,7 @@
                 
                 alert(`✅ +${quantidade} un. adicionadas! Total (${tamanho || 'Sem tamanho'}${localizacao ? ' | ' + localizacao : ''}): ${novaQtd}`);
             } else {
-                const { error: e } = await supabaseBalanco.from('balanco_estoque').insert([{
+                const { error: e } = await supabaseBalanco.from('Balanco_MaxShop').insert([{
                     codigo: codigoStr,
                     loja: lojaStr,
                     descricao,
@@ -1051,7 +1057,8 @@
                     caixa_saco: caixaSaco,
                     quantidade,
                     valor,
-                    valor_promocao: valorPromocao
+                    valor_promocao: valorPromocao,
+                    operador: operadorStr
                 }]);
                 if (e) throw e; 
                 alert(`✅ Registrado com sucesso! Quantidade lançada: ${quantidade}`);
@@ -1074,7 +1081,7 @@
     async function exportarBalancoExcel() {
         if (!exigirLoja()) return;
         try {
-            const { data, error } = await supabaseBalanco.from('balanco_estoque').select('*').eq('loja', String(lojaSelecionada).trim());
+            const { data, error } = await supabaseBalanco.from('Balanco_MaxShop').select('*').eq('loja', String(lojaSelecionada).trim());
             if (error) throw error;
             if (!data?.length) { alert('Nenhum dado encontrado para esta loja.'); return; }
             const ws = XLSX.utils.json_to_sheet(data);
