@@ -50,13 +50,14 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             text-align: center;
         }
-        .auth-card input {
+        .auth-card input, .auth-card select {
             width: 100%;
             padding: 10px;
             margin: 8px 0;
             box-sizing: border-box;
             border: 1px solid #ccc;
             border-radius: 4px;
+            font-size: 15px;
         }
         .auth-card button {
             width: 100%;
@@ -268,7 +269,14 @@
         <div class="auth-card" style="max-width: 420px;">
             <img src="logo.jpg" alt="Logo da Empresa" class="app-logo">
             <h2>Identificação Inicial</h2>
-            <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Preencha os campos obrigatórios abaixo para iniciar no sistema:</p>
+            <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Escolha a tabela de balanço e preencha os dados:</p>
+            
+            <label style="font-size: 12px; font-weight: bold; display: block; text-align: left; margin-top: 5px;">Banco/Tabela de Balanço *</label>
+            <select id="setup-tabela">
+                <option value="Balanco_Juscelino">Balanco_Juscelino</option>
+                <option value="Balanço_loja16">Balanço_loja16</option>
+            </select>
+
             <input type="number" id="setup-loja" placeholder="Número da Loja *">
             <input type="text" id="setup-operador" placeholder="Operador *">
             <input type="text" id="setup-lote" placeholder="Lote / Saco / Caixa *">
@@ -405,10 +413,11 @@
     let lojaSelecionada = null;
     let operadorSelecionado = null;
     let loteSacoCaixaSelecionado = null;
+    let tabelaBalancoSelecionada = 'Balanco_Juscelino';
 
     function normalizarCodigo(str) {
         if (!str) return '';
-        // Converte estritamente para string preservando todos os zeros à esquerda (ex: 000000256360)
+        // Mantém estritamente como string para preservar zeros à esquerda (ex: 000000256360)
         return String(str).trim();
     }
     function escaparHTML(v) {
@@ -441,7 +450,7 @@
 
     function exigirLoja() {
         if (!lojaSelecionada || !operadorSelecionado || !loteSacoCaixaSelecionado) {
-            alert('⚠️ Informe e confirme o Número da Loja, o Operador e o Lote/Saco/Caixa antes de prosseguir.');
+            alert('⚠️ Informe e confirme os dados iniciais antes de prosseguir.');
             abrirEdicaoSetup();
             return false;
         }
@@ -449,6 +458,7 @@
     }
 
     function abrirEdicaoSetup() {
+        document.getElementById('setup-tabela').value = tabelaBalancoSelecionada || 'Balanco_Juscelino';
         document.getElementById('setup-loja').value = lojaSelecionada || '';
         document.getElementById('setup-operador').value = operadorSelecionado || '';
         document.getElementById('setup-lote').value = loteSacoCaixaSelecionado || '';
@@ -462,6 +472,7 @@
         
         document.getElementById('main-app').style.display = 'none';
         
+        document.getElementById('setup-tabela').value = tabelaBalancoSelecionada || 'Balanco_Juscelino';
         document.getElementById('setup-loja').value = lojaSelecionada || '';
         document.getElementById('setup-operador').value = operadorSelecionado || '';
         document.getElementById('setup-lote').value = ''; 
@@ -470,6 +481,7 @@
     }
 
     function confirmarSetupInicial() {
+        const tabelaVal = document.getElementById('setup-tabela').value;
         const lojaVal = document.getElementById('setup-loja').value.trim();
         const operadorVal = document.getElementById('setup-operador').value.trim();
         const loteVal = document.getElementById('setup-lote').value.trim();
@@ -478,11 +490,12 @@
         setupError.style.display = 'none';
 
         if (!lojaVal || !operadorVal || !loteVal) {
-            setupError.innerText = '⚠️ Todos os 3 campos (Loja, Operador e Lote/Saco/Caixa) são obrigatórios!';
+            setupError.innerText = '⚠️ Todos os campos são obrigatórios!';
             setupError.style.display = 'block';
             return;
         }
 
+        tabelaBalancoSelecionada = tabelaVal;
         lojaSelecionada = lojaVal;
         operadorSelecionado = operadorVal;
         loteSacoCaixaSelecionado = loteVal;
@@ -516,7 +529,7 @@
 
         if (elemLojaAtual) {
             elemLojaAtual.innerHTML = lojaSelecionada
-              ? `🏪 Loja: <strong>${escaparHTML(lojaSelecionada)}</strong> | 👤 Operador: <strong>${escaparHTML(operadorSelecionado)}</strong> | 📦 Lote/Saco/Caixa: <strong>${escaparHTML(loteSacoCaixaSelecionado)}</strong>`
+              ? `🗄️ Tabela: <strong>${escaparHTML(tabelaBalancoSelecionada)}</strong> | 🏪 Loja: <strong>${escaparHTML(lojaSelecionada)}</strong> | 👤 Operador: <strong>${escaparHTML(operadorSelecionado)}</strong> | 📦 Lote: <strong>${escaparHTML(loteSacoCaixaSelecionado)}</strong>`
               : 'Nenhum dado informado.';
         }
     }
@@ -681,7 +694,7 @@
         if (erroCadastro) console.error("Erro ao buscar cadastro:", erroCadastro);
 
         const { data: estoque, error: erroEstoque } = await supabaseBalanco
-            .from('Balanco_MaxShop')
+            .from(tabelaBalancoSelecionada)
             .select('*')
             .eq('codigo', codStr)
             .eq('loja', lojaStr);
@@ -946,13 +959,13 @@
             if (e) throw e;
             
             if (!isNaN(qtd) && qtd >= 0) {
-                const { data: rows, error: er } = await supabaseBalanco.from('Balanco_MaxShop').select('id').eq('codigo', codigoStr).eq('loja', lojaStr);
+                const { data: rows, error: er } = await supabaseBalanco.from(tabelaBalancoSelecionada).select('id').eq('codigo', codigoStr).eq('loja', lojaStr);
                 if (er) throw er;
                 if (rows && rows.length) {
-                    await supabaseBalanco.from('Balanco_MaxShop').update({ quantidade: qtd, descricao: desc, valor: valor, valor_promocao: valorPromo, operador: operadorStr }).eq('id', rows[0].id);
-                    for (let i = 1; i < rows.length; i++) await supabaseBalanco.from('Balanco_MaxShop').update({ quantidade: 0, operador: operadorStr }).eq('id', rows[i].id);
+                    await supabaseBalanco.from(tabelaBalancoSelecionada).update({ quantidade: qtd, descricao: desc, valor: valor, valor_promocao: valorPromo, operador: operadorStr }).eq('id', rows[0].id);
+                    for (let i = 1; i < rows.length; i++) await supabaseBalanco.from(tabelaBalancoSelecionada).update({ quantidade: 0, operador: operadorStr }).eq('id', rows[i].id);
                 } else {
-                    await supabaseBalanco.from('Balanco_MaxShop').insert([{ codigo: codigoStr, loja: lojaStr, descricao: desc, tamanho: '', quantidade: qtd, valor: valor, valor_promocao: valorPromo, operador: operadorStr }]);
+                    await supabaseBalanco.from(tabelaBalancoSelecionada).insert([{ codigo: codigoStr, loja: lojaStr, descricao: desc, tamanho: '', quantidade: qtd, valor: valor, valor_promocao: valorPromo, operador: operadorStr }]);
                 }
             }
             alert('✅ Cadastro e estoque atualizados com sucesso!');
@@ -1008,7 +1021,7 @@
             const blocoVal = bloco !== '' ? bloco : null;
             const linhaVal = linha !== '' ? linha : null;
 
-            let query = supabaseBalanco.from('Balanco_MaxShop').select('*')
+            let query = supabaseBalanco.from(tabelaBalancoSelecionada).select('*')
                 .eq('codigo', codigoStr)
                 .eq('loja', lojaStr)
                 .eq('tamanho', tamanho)
@@ -1026,7 +1039,7 @@
 
             if (data) {
                 const novaQtd = Number(data.quantidade || 0) + quantidade;
-                const { error: e } = await supabaseBalanco.from('Balanco_MaxShop').update({
+                const { error: e } = await supabaseBalanco.from(tabelaBalancoSelecionada).update({
                     quantidade: novaQtd,
                     descricao,
                     valor,
@@ -1047,7 +1060,7 @@
                 
                 alert(`✅ +${quantidade} un. adicionadas! Total (${tamanho || 'Sem tamanho'}${localizacao ? ' | ' + localizacao : ''}): ${novaQtd}`);
             } else {
-                const { error: e } = await supabaseBalanco.from('Balanco_MaxShop').insert([{
+                const { error: e } = await supabaseBalanco.from(tabelaBalancoSelecionada).insert([{
                     codigo: codigoStr,
                     loja: lojaStr,
                     descricao,
@@ -1081,13 +1094,13 @@
     async function exportarBalancoExcel() {
         if (!exigirLoja()) return;
         try {
-            const { data, error } = await supabaseBalanco.from('Balanco_MaxShop').select('*').eq('loja', String(lojaSelecionada).trim());
+            const { data, error } = await supabaseBalanco.from(tabelaBalancoSelecionada).select('*').eq('loja', String(lojaSelecionada).trim());
             if (error) throw error;
             if (!data?.length) { alert('Nenhum dado encontrado para esta loja.'); return; }
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Balanço');
-            XLSX.writeFile(wb, `Balanco_Estoque_Loja_${lojaSelecionada}_${new Date().toISOString().slice(0,10)}.xlsx`);
+            XLSX.writeFile(wb, `Balanco_${tabelaBalancoSelecionada}_Loja_${lojaSelecionada}_${new Date().toISOString().slice(0,10)}.xlsx`);
         } catch (err) {
             console.error(err);
             alert('❌ Erro ao exportar: ' + err.message);
@@ -1099,6 +1112,7 @@
             lojaSelecionada = null;
             operadorSelecionado = null;
             loteSacoCaixaSelecionado = null;
+            tabelaBalancoSelecionada = 'Balanco_Juscelino';
             if (scannerPromocao) { try { scannerPromocao.clear(); } catch(e){} }
             if (scannerBalanco) { try { scannerBalanco.clear(); } catch(e){} }
             location.reload();
