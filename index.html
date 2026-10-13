@@ -629,77 +629,80 @@
     }
 
     async function verificarPromocao(codigo) {
-        if (!lojaSelecionada) return { emPromocao: false, valorPromocao: null };
         const codStr = normalizarCodigo(codigo);
-        const lojaStr = String(lojaSelecionada).trim();
+        if (!codStr) return { emPromocao: false, valorPromocao: null, promocoes: [] };
 
-        if (!codStr) return { emPromocao: false, valorPromocao: null };
+        const clientes = [];
+        if (supabaseConsultaPromocoes) clientes.push(supabaseConsultaPromocoes);
+        if (supabasePromocoes && !clientes.includes(supabasePromocoes)) clientes.push(supabasePromocoes);
 
-        if (supabaseConsultaPromocoes) {
+        let ultimoErro = null;
+        for (const cliente of clientes) {
             try {
-                const { data, error } = await supabaseConsultaPromocoes
+                // Busca pelo código de barras em todas as lojas: sem filtro .eq('loja', ...).
+                const { data, error } = await cliente
                     .from('promocoes')
                     .select('*')
-                    .eq('codigo', codStr)
-                    .eq('loja', lojaStr);
+                    .eq('codigo', codStr);
 
-                if (!error && data && data.length > 0) {
-                    const item = data[0];
-                    const valPromo = item.valor_promocao ?? item.valor_promocional ?? item.preco_promocao ?? item.valor ?? null;
-                    if (valPromo !== null && numero(valPromo) > 0) {
-                        return { emPromocao: true, valorPromocao: valPromo, itemPromocao: item };
-                    }
+                if (error) { ultimoErro = error; console.error('Erro ao consultar promocoes:', error); continue; }
+
+                const registros = (data || []).filter(item => {
+                    const valor = item.valor_promocao ?? item.valor_promocional ??
+                        item.preco_promocao ?? item.preco_promocional ?? item.valor ?? null;
+                    const status = String(item.status ?? item.situacao ?? item.ativo ?? '').toLowerCase().trim();
+                    const inativo = ['0','false','nao','não','inativo','inativa','off','cancelada','cancelado'].includes(status);
+                    return !inativo && valor !== null && valor !== '' && numero(valor) > 0;
+                });
+
+                if (registros.length) {
+                    // Exibe primeiro a promoção da loja selecionada, mas inclui as demais lojas.
+                    registros.sort((x, y) =>
+                        Number(String(y.loja ?? '').trim() === String(lojaSelecionada ?? '').trim()) -
+                        Number(String(x.loja ?? '').trim() === String(lojaSelecionada ?? '').trim())
+                    );
+                    const principal = registros[0];
+                    return {
+                        emPromocao: true,
+                        valorPromocao: principal.valor_promocao ?? principal.valor_promocional ??
+                            principal.preco_promocao ?? principal.preco_promocional ?? principal.valor,
+                        itemPromocao: principal,
+                        promocoes: registros
+                    };
                 }
-            } catch (e) {
-                console.error("Erro ao buscar promoção na base SUPABASE_3:", e);
-            }
+                return { emPromocao: false, valorPromocao: null, promocoes: [] };
+            } catch (e) { ultimoErro = e; console.error('Falha ao consultar promoções:', e); }
         }
-
-        try {
-            const { data, error } = await supabasePromocoes
-                .from('promocoes')
-                .select('*')
-                .eq('codigo', codStr)
-                .eq('loja', lojaStr);
-
-            if (!error && data && data.length > 0) {
-                const item = data[0];
-                const valPromo = item.valor_promocao ?? item.valor_promocional ?? item.preco_promocao ?? item.valor ?? null;
-                if (valPromo !== null && numero(valPromo) > 0) {
-                    return { emPromocao: true, valorPromocao: valPromo, itemPromocao: item };
-                }
-            }
-        } catch (e) {
-            console.error("Erro ao verificar promoção na base fallback:", e);
-        }
-
-        return { emPromocao: false, valorPromocao: null };
+        if (ultimoErro) throw ultimoErro;
+        return { emPromocao: false, valorPromocao: null, promocoes: [] };
     }
 
     async function buscarProdutoCompleto(codigo) {
-        if (!lojaSelecionada) throw new Error('Informe o número da loja antes de pesquisar.');
-        
         const codStr = normalizarCodigo(codigo);
-        const lojaStr = String(lojaSelecionada).trim();
+        const lojaStr = String(lojaSelecionada ?? '').trim();
 
         if (!codStr) return { cadastro: null, estoque: [] };
 
-        let { data: cadastro, error: erroCadastro } = await supabaseBalanco
+        // Cadastro compartilhado: pesquisa pelo código de barras, sem filtrar por loja.
+        let { data: cadastros, error: erroCadastro } = await supabaseBalanco
             .from('balanco_cadastro')
             .select('*')
             .eq('codigo', codStr)
-            .eq('loja', lojaStr)
-            .maybeSingle();
+            .limit(1);
+        let cadastro = cadastros && cadastros.length ? cadastros[0] : null;
 
         if (erroCadastro) console.error("Erro ao buscar cadastro:", erroCadastro);
 
-        const { data: estoque, error: erroEstoque } = await supabaseBalanco
-            .from(tabelaBalancoSelecionada)
-            .select('*')
-            .eq('codigo', codStr)
-            .eq('loja', lojaStr);
-
-        if (erroEstoque) console.error("Erro ao buscar estoque:", erroEstoque);
+        let estoque = [];
+        if (lojaStr) {
+            const { data, error: erroEstoque } = await supabaseBalanco
+                .from(tabelaBalancoSelecionada)
+                .select('*')
+                .eq('codigo', codStr)
+                .eq('loja', lojaStr);
+            if (erroEstoque) console.error("Erro ao buscar estoque:", erroEstoque);
+            estoque = data || [];
+        }
 
         const promoInfo = await verificarPromocao(codStr);
 
@@ -791,9 +794,28 @@
         const box = document.getElementById('status-promocao');
         if (!box) return;
 
-        if (resultadoPromo && resultadoPromo.emPromocao && numero(resultadoPromo.valorPromocao) > 0) {
+        if (resultadoPromo && resultadoPromo.emPromocao) {
             box.className = 'status-promocao status-promocao-em';
-            box.innerHTML = `🔥 Preço Promoção: <strong>${moeda(resultadoPromo.valorPromocao)}</strong>`;
+            const lista = resultadoPromo.promocoes || [resultadoPromo.itemPromocao].filter(Boolean);
+            box.innerHTML = '<div style="font-weight:900;margin-bottom:8px;">🔥 ESTE PRODUTO ESTÁ EM PROMOÇÃO!</div>' +
+                lista.map(item => {
+                    const loja = item.loja !== undefined && item.loja !== null && String(item.loja).trim()
+                        ? 'Loja ' + escaparHTML(item.loja) : 'Loja não informada';
+                    const descricao = obterValorCampo(item, ['descricao','produto','nome']);
+                    const codigo = obterValorCampo(item, ['codigo','codigo_barras','cod_barras','ean']);
+                    const normal = obterValorCampo(item, ['valor_normal','valor_cadastro','preco_normal','preco']);
+                    const promo = obterValorCampo(item, ['valor_promocao','valor_promocional','preco_promocao','preco_promocional','valor']);
+                    const validade = obterValorCampo(item, ['validade','data_validade','fim_promocao','data_fim']);
+                    return `<div style="text-align:left;background:#fff;padding:10px;margin:8px 0;border:1px solid #b7dfbf;border-radius:6px;">
+                        <strong>Promoção para ${loja}</strong>
+                        ${descricao ? `<div>Produto: ${escaparHTML(descricao)}</div>` : ''}
+                        ${codigo ? `<div>Código de barras: ${escaparHTML(codigo)}</div>` : ''}
+                        ${normal !== '' && normal !== null && normal !== undefined ? `<div>Preço normal: ${moeda(normal)}</div>` : ''}
+                        ${promo !== '' && promo !== null && promo !== undefined ? `<div><strong>Preço promocional: ${moeda(promo)}</strong></div>` : ''}
+                        ${validade ? `<div>Validade: ${escaparHTML(validade)}</div>` : ''}
+                        <details><summary>Ver todos os dados da promoção</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;">${escaparHTML(JSON.stringify(item, null, 2))}</pre></details>
+                    </div>`;
+                }).join('');
         } else {
             box.className = 'status-promocao status-promocao-fora';
             box.innerHTML = '⚪ ESTE PRODUTO NÃO ESTÁ EM PROMOÇÃO.';
@@ -801,7 +823,6 @@
     }
 
     async function buscarPorCodigoPromocao(codigoEscaneado) {
-        if (!exigirLoja()) { processandoLeituraPromocao = false; return; }
         if (!codigoEscaneado) { processandoLeituraPromocao = false; return; }
 
         const codigoTratado = normalizarCodigo(codigoEscaneado);
@@ -825,7 +846,7 @@
                 res.innerHTML = `
                     <div class="product-title" style="color:#c62828;">Produto não encontrado</div>
                     <div class="product-code">
-                        O código <strong>${escaparHTML(codigoTratado)}</strong> não possui cadastro na loja <strong>${escaparHTML(lojaSelecionada)}</strong>.
+                        O código <strong>${escaparHTML(codigoTratado)}</strong> não foi encontrado no cadastro geral de produtos.
                     </div>`;
             } else {
                 resultBox.className = 'result-box found';
@@ -902,10 +923,10 @@
 
                 resultBox.className = 'result-box not-found';
                 res.innerHTML = `
-                    <div class="product-title" style="color:#c62828;">PRODUTO NÃO CADASTRADO NESTA LOJA</div>
+                    <div class="product-title" style="color:#c62828;">PRODUTO NÃO ENCONTRADO NO CADASTRO GERAL</div>
                     <div class="product-code">
                         Código: <strong>${escaparHTML(codigoTratado)}</strong><br>
-                        Loja selecionada: <strong>${escaparHTML(lojaSelecionada)}</strong>.
+                        Loja de destino do balanço: <strong>${escaparHTML(lojaSelecionada)}</strong>.
                         Preencha as informações do produto abaixo.
                     </div>`;
 
