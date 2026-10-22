@@ -338,8 +338,39 @@
         .mode-management #form-registro-balanco .form-grid { display:grid!important; }
 
     </style>
+
+<style>
+  #global-nav{position:fixed;top:10px;right:12px;left:12px;z-index:10001;display:flex;align-items:center;gap:8px;pointer-events:none}
+  #global-nav .global-nav-btn{pointer-events:auto;display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#17324d;font-size:13px;font-weight:600;line-height:1;box-shadow:0 2px 8px rgba(15,35,55,.10);cursor:pointer;width:auto;min-width:0;aspect-ratio:auto}
+  #global-nav .global-exit-btn{background:#a8323e;border-color:#a8323e;color:#fff}
+  .global-nav-spacer{flex:1}
+  .balance-context-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border:1px solid #dbe5ed;border-radius:10px;background:#f7fafc}
+  .balance-context-label{font-size:13px;font-weight:700;color:#17324d}
+  .btn-change-sack{width:auto!important;min-width:0!important;min-height:34px!important;padding:7px 11px!important;border-radius:8px!important;font-size:12px!important;line-height:1.2!important;aspect-ratio:auto!important;background:#0b6b78!important;color:#fff!important}
+  .quantity-panel{margin-top:10px;padding:12px;border:1px solid #c9dce7;border-radius:10px;background:#f3f8fb;display:flex;flex-direction:column;gap:8px}
+  .quantity-panel-title{font-size:14px;font-weight:800;color:#17324d}
+  .quantity-panel label{font-size:13px;color:#344b60;line-height:1.4}
+  .quantity-panel-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .quantity-panel-controls input{width:110px;max-width:100%;min-height:36px;padding:7px 9px;border:1px solid #b8c9d6;border-radius:8px;font-size:16px;font-weight:700;box-sizing:border-box}
+  .product-action-buttons{display:flex;align-items:stretch;gap:10px;width:100%;margin-top:10px}
+  .product-action-buttons .btn-action{display:flex;align-items:center;justify-content:center;flex:1 1 0;min-width:0;width:0;min-height:64px;margin:0!important;padding:10px 8px!important;text-align:center;white-space:normal;line-height:1.25;overflow-wrap:anywhere}
+  .btn-quantity-toggle{background:#0b5275!important;color:#fff!important;border-color:#0b5275!important}
+  .btn-quantity-confirm{background:#16806a!important;color:#fff!important;border-color:#16806a!important}
+  .quantity-panel small{font-size:11px;color:#607486}
+  .quantity-confirmed{margin-top:8px;font-size:12px;font-weight:700;color:#12624f}
+  /* Botões de ação mais compactos e consistentes em qualquer dispositivo. */
+  .btn-action{min-height:36px;padding:8px 12px;font-size:13px;border-radius:8px;}
+  #menu-overlay .menu-option,#menu-overlay .menu-btn{min-height:0}
+  @media(max-width:600px){#global-nav{top:7px;left:8px;right:8px}.balance-context-actions{align-items:flex-start}.btn-change-sack{font-size:12px!important}}
+</style>
+
 </head>
 <body>
+    <div id="global-nav" aria-label="Navegação do sistema" style="display:none;">
+      <button type="button" class="global-nav-btn" onclick="voltarPaginaAnterior()" title="Voltar à página anterior">← Voltar</button>
+      <div class="global-nav-spacer"></div>
+      <button type="button" class="global-nav-btn global-exit-btn" onclick="sairDoSistema()" title="Sair do sistema">⏻ Sair</button>
+    </div>
 
     <div id="auth-overlay">
         <div class="auth-card">
@@ -424,6 +455,10 @@
         </div>
 
         <div id="page-balanco" style="display: none;">
+            <div class="balance-context-actions">
+              <span id="balanco-caixa-atual" class="balance-context-label">Caixa/Saco: —</span>
+              <button type="button" class="btn-action btn-change-sack" onclick="alterarCaixaSaco()">⇄ Alterar Caixa/Saco</button>
+            </div>
             <div class="scanner-card">
                 <div id="reader-balanco" class="reader-box"></div>
                 <div class="manual-input-box">
@@ -434,7 +469,20 @@
 
             <div id="result-box-balanco" class="result-box">
                 <div id="res-conteudo-balanco"></div>
-                <button id="btn-abrir-editar" class="btn-action" style="display:none; margin-top:10px;" onclick="toggleEdicaoCadastro()">✏️ Editar Cadastro/Estoque</button>
+                <div class="product-action-buttons">
+                    <button id="btn-abrir-quantidade" type="button" class="btn-action btn-quantity-toggle" style="display:none;" onclick="alternarPainelQuantidade()">＋ Alterar quantidade</button>
+                    <button id="btn-abrir-editar" type="button" class="btn-action" style="display:none;" onclick="toggleEdicaoCadastro()">✏️ Editar Cadastro/Estoque</button>
+                </div>
+                <div id="painel-alterar-quantidade" class="quantity-panel" style="display:none;">
+                    <div class="quantity-panel-title">Alterar quantidade</div>
+                    <label for="quantidade-pecas-codigo">Quantas peças deste código serão enviadas para o balanço?</label>
+                    <div class="quantity-panel-controls">
+                        <input type="number" id="quantidade-pecas-codigo" step="1" value="1" inputmode="numeric" aria-label="Quantidade de peças">
+                        <button type="button" class="btn-action btn-quantity-confirm" onclick="confirmarQuantidadePecas()">Confirmar</button>
+                    </div>
+                    <small>Informe o total de peças com este mesmo código de barras.</small>
+                </div>
+                <div id="quantidade-confirmada" class="quantity-confirmed" style="display:none;"></div>
                 
                 <div id="box-edicao-cadastro" style="display:none; flex-direction:column; gap:8px; margin-top:10px; padding:10px; background:#fff; border-radius:4px;">
                     <h4>Editar Produto</h4>
@@ -483,7 +531,7 @@
                     </div>
                     <div class="form-group">
                         <label>Quantidade *</label>
-                        <input type="number" id="bal-quantidade" value="1" min="1">
+                        <input type="number" id="bal-quantidade" value="1" step="1">
                     </div>
                 </div>
 
@@ -645,6 +693,8 @@
     }
 
     function atualizarLojaUI() {
+        const caixaLabel = document.getElementById('balanco-caixa-atual');
+        if (caixaLabel) caixaLabel.textContent = 'Caixa/Saco: ' + (loteSacoCaixaSelecionado || '—');
         const inputLoja = document.getElementById('input-loja');
         const inputOperador = document.getElementById('input-operador');
         const inputLoteGeral = document.getElementById('input-lote-geral');
@@ -743,6 +793,7 @@
                 authError.style.display = 'block';
             } else {
                 document.getElementById('auth-overlay').style.display = 'none';
+                document.getElementById('global-nav').style.display = 'flex';
                 document.getElementById('menu-overlay').style.display = 'flex';
             }
         } catch (err) {
@@ -1008,6 +1059,10 @@
         const editBox = document.getElementById('box-edicao-cadastro');
 
         resultBox.style.display = 'none';
+        document.getElementById('btn-abrir-quantidade').style.display = 'none';
+        document.getElementById('painel-alterar-quantidade').style.display = 'none';
+        document.getElementById('quantidade-confirmada').style.display = 'none';
+        document.getElementById('quantidade-pecas-codigo').value = 1;
         form.style.display = 'none';
         manual.style.display = 'none';
         editBtn.style.display = 'none';
@@ -1061,6 +1116,7 @@
             }
 
             form.style.display = 'flex';
+            document.getElementById('btn-abrir-quantidade').style.display = 'inline-flex';
         } catch (err) {
             console.error('Erro na consulta do produto:', err);
             resultBox.style.display = 'block';
@@ -1069,6 +1125,36 @@
         } finally {
             processandoLeituraBalanco = false;
         }
+    }
+
+    function alternarPainelQuantidade() {
+        const painel = document.getElementById('painel-alterar-quantidade');
+        const abrir = document.getElementById('btn-abrir-quantidade');
+        const aberto = painel.style.display !== 'none' && painel.style.display !== '';
+        painel.style.display = aberto ? 'none' : 'flex';
+        abrir.innerText = aberto ? '＋ Alterar quantidade' : '− Fechar quantidade';
+        if (!aberto) {
+            const atual = parseInt(document.getElementById('bal-quantidade').value, 10) || 1;
+            document.getElementById('quantidade-pecas-codigo').value = atual;
+            document.getElementById('quantidade-pecas-codigo').focus();
+            document.getElementById('quantidade-pecas-codigo').select();
+        }
+    }
+
+    function confirmarQuantidadePecas() {
+        const campo = document.getElementById('quantidade-pecas-codigo');
+        const quantidade = Number.parseInt(campo.value, 10);
+        if (!Number.isInteger(quantidade) || quantidade === 0) {
+            alert('Informe uma quantidade inteira diferente de zero. Use um número negativo para corrigir ou reduzir a quantidade do balanço.');
+            campo.focus();
+            return;
+        }
+        document.getElementById('bal-quantidade').value = quantidade;
+        const aviso = document.getElementById('quantidade-confirmada');
+        aviso.textContent = `Quantidade definida: ${quantidade} peça(s) deste código será(ão) enviada(s) para o balanço.`;
+        aviso.style.display = 'block';
+        document.getElementById('painel-alterar-quantidade').style.display = 'none';
+        document.getElementById('btn-abrir-quantidade').innerText = '＋ Alterar quantidade';
     }
 
     function toggleEdicaoCadastro() {
@@ -1205,8 +1291,12 @@
                     caixaSaco ? `Caixa/Saco: ${caixaSaco}` : ''
                 ].filter(Boolean).join(' | ');
                 
-                alert(`✅ +${quantidade} un. adicionadas! Total (${tamanho || 'Sem tamanho'}${localizacao ? ' | ' + localizacao : ''}): ${novaQtd}`);
+                const acaoQuantidade = quantidade > 0 ? `${quantidade} un. adicionadas` : `${Math.abs(quantidade)} un. descontadas para correção`;
+                alert(`✅ ${acaoQuantidade}! Total (${tamanho || 'Sem tamanho'}${localizacao ? ' | ' + localizacao : ''}): ${novaQtd}`);
             } else {
+                if (quantidade < 0) {
+                    throw new Error('Não é possível lançar uma quantidade negativa para um produto sem registro anterior. Confira o código, tamanho, bloco, linha e Caixa/Saco selecionados.');
+                }
                 const { error: e } = await supabaseBalanco.from(tabelaBalancoSelecionada).insert([{
                     codigo: codigoStr,
                     loja: lojaStr,
@@ -1227,6 +1317,10 @@
             document.getElementById('result-box-balanco').style.display = 'none';
             document.getElementById('form-registro-balanco').style.display = 'none';
             document.getElementById('manual-code-balanco').value = '';
+            document.getElementById('btn-abrir-quantidade').style.display = 'none';
+            document.getElementById('painel-alterar-quantidade').style.display = 'none';
+            document.getElementById('quantidade-confirmada').style.display = 'none';
+            document.getElementById('bal-quantidade').value = 1;
             
             if (scannerBalanco) { try { scannerBalanco.resume(); } catch(e){} }
             processandoLeituraBalanco = false;
@@ -1254,8 +1348,54 @@
         }
     }
 
+    function voltarPaginaAnterior() {
+        const setup = document.getElementById('setup-overlay');
+        const app = document.getElementById('main-app');
+        const menu = document.getElementById('menu-overlay');
+        if (setup && setup.style.display !== 'none') {
+            setup.style.display = 'none';
+            if (menu) menu.style.display = 'flex';
+            if (app) app.style.display = 'none';
+            return;
+        }
+        if (app && app.style.display !== 'none') {
+            voltarMenu();
+            return;
+        }
+        if (menu && menu.style.display !== 'none') {
+            if (confirm('Voltar para a tela de login?')) {
+                if (scannerPromocao) { try { scannerPromocao.clear(); } catch(e){} scannerPromocao = null; }
+                if (scannerBalanco) { try { scannerBalanco.clear(); } catch(e){} scannerBalanco = null; }
+                menu.style.display = 'none';
+                document.getElementById('global-nav').style.display = 'none';
+                document.getElementById('auth-overlay').style.display = 'flex';
+                document.getElementById('input-senha').value = '';
+            }
+        }
+    }
+
+    function alterarCaixaSaco() {
+        const atual = loteSacoCaixaSelecionado || '';
+        const novo = prompt('Informe o novo número da Caixa/Saco:', atual);
+        if (novo === null) return;
+        const valor = novo.trim();
+        if (!valor) { alert('Informe um número válido para a Caixa/Saco.'); return; }
+        if (valor === atual) return;
+        if (!confirm('Alterar a Caixa/Saco de ' + (atual || '—') + ' para ' + valor + '?')) return;
+        loteSacoCaixaSelecionado = valor;
+        const campo = document.getElementById('bal-caixa-saco');
+        if (campo) campo.value = valor;
+        const setupCampo = document.getElementById('setup-lote');
+        if (setupCampo) setupCampo.value = valor;
+        const label = document.getElementById('balanco-caixa-atual');
+        if (label) label.textContent = 'Caixa/Saco: ' + valor;
+        // Mantém a operação e o leitor ativos; não exige novo login nem reinicia o aplicativo.
+        alert('Caixa/Saco atualizado para ' + valor + '. Os próximos lançamentos usarão esse número.');
+    }
+
     function sairDoSistema() {
         if (confirm('Deseja realmente sair do sistema?')) {
+            const nav = document.getElementById('global-nav'); if (nav) nav.style.display = 'none';
             lojaSelecionada = null;
             operadorSelecionado = null;
             loteSacoCaixaSelecionado = null;
